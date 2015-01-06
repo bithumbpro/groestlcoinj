@@ -25,20 +25,13 @@ public class CoinDefinition {
 
     public static String lowerCaseCoinName() { return coinName.toLowerCase(); }
 
-    public enum CoinPrecision {
-        Coins,
-        Millicoins,
-    }
-    public static final CoinPrecision coinPrecision = CoinPrecision.Coins;
-
-
-    public static final String BLOCKEXPLORER_BASE_URL_PROD = "https://chainz.cryptoid.info/grs/";    //blockr.io
-    public static final String BLOCKEXPLORER_ADDRESS_PATH = "address.dws?";             //blockr.io path
-    public static final String BLOCKEXPLORER_TRANSACTION_PATH = "tx.dws?";              //blockr.io path
-    public static final String BLOCKEXPLORER_BLOCK_PATH = "block.dws?";                 //blockr.io path
+    public static final String BLOCKEXPLORER_BASE_URL_PROD = "https://chainz.cryptoid.info/grs/";
+    public static final String BLOCKEXPLORER_ADDRESS_PATH = "address.dws?";
+    public static final String BLOCKEXPLORER_TRANSACTION_PATH = "tx.dws?";
+    public static final String BLOCKEXPLORER_BLOCK_PATH = "block.dws?";
     public static final String BLOCKEXPLORER_BASE_URL_TEST = BLOCKEXPLORER_BASE_URL_PROD;
 
-    public static final String DONATION_ADDRESS = "FkknEYnex1MeZyPRnEebFK5ZBHHsFZbvaf";  //HashEngineering donation DGC address
+    public static final String DONATION_ADDRESS = "FkknEYnex1MeZyPRnEebFK5ZBHHsFZbvaf";  //HashEngineering donation GRS address
 
     public static final String UNSPENT_API_URL = "https://chainz.cryptoid.info/grs/api.dws?q=unspent";
     public enum UnspentAPIType {
@@ -49,13 +42,6 @@ public class CoinDefinition {
     };
     public static final UnspentAPIType UnspentAPI = UnspentAPIType.Cryptoid;
 
-    enum CoinHash {
-        SHA256,
-        scrypt,
-        other,
-    };
-    public static final CoinHash coinPOWHash = CoinHash.other;
-
     public static boolean checkpointFileSupport = true;
     public static int checkpointDaysBack = 21;
 
@@ -63,23 +49,9 @@ public class CoinDefinition {
     public static final int TARGET_SPACING = (int)(1 * 60);  // 60 seconds per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;  //108 blocks
 
-    public static final int getInterval(int height, boolean testNet) {
-            return INTERVAL;      //108
-    }
     public static final int getIntervalCheckpoints() {
             return 2016;    //1080
 
-    }
-    public static final int getTargetTimespan(int height, boolean testNet) {
-            return TARGET_TIMESPAN;    //72 min
-    }
-    public static int getMaxTimeSpan(int value, int height, boolean testNet)
-    {
-            return value * 75 / 60;
-    }
-    public static int getMinTimeSpan(int value, int height, boolean testNet)
-    {
-            return value * 55 / 73;
     }
     public static int spendableCoinbaseDepth = 120; //main.h: static const int CINBASE_MATURITY
     public static final int MAX_COINS = 105000000;                 //main.h:  MAX_MONEY
@@ -109,7 +81,6 @@ public class CoinDefinition {
     //
     public static final int AddressHeader = 36;             //base58.h CBitcoinAddress::PUBKEY_ADDRESS
     public static final int p2shHeader = 5;             //base58.h CBitcoinAddress::SCRIPT_ADDRESS
-    public static final boolean allowBitcoinPrivateKey = false; //for backward compatibility with previous version of digitalcoin
     public static final long PacketMagic = 0xf9beb4d4;      //0xf9, 0xbe, 0xb4, 0xd4
 
     //Genesis Block Information from main.cpp: LoadBlockIndex
@@ -160,24 +131,82 @@ public class CoinDefinition {
     {
         int COIN = 1;
         Coin nSubsidy = Coin.valueOf(15, 0);
+        return nSubsidy.shiftRight(height / subsidyDecreaseBlockCount);
+    }
+    static final Coin nGenesisBlockRewardCoin = Coin.valueOf(1,0);
+    static final Coin minimumSubsidy = Coin.valueOf(5,0);
+    static final Coin nPremine = Coin.valueOf(240640,0);
+
+    Coin GetBlockSubsidy(int nHeight){
 
 
+        if (nHeight == 0)
+        {
+            return nGenesisBlockRewardCoin;
+        }
 
-            //return nSubsidy.shiftRight(height / subsidyDecreaseBlockCount);
+        if (nHeight == 1)
+        {
+            return nPremine;
+		/*
+		optimized standalone cpu miner 	60*512=30720
+		standalone gpu miner 			120*512=61440
+		first pool			 			70*512 =35840
+		block-explorer		 			60*512 =30720
+		mac wallet binary    			30*512 =15360
+		linux wallet binary  			30*512 =15360
+		web-site						100*512	=51200
+		total									=240640
+		*/
+        }
+
+        Coin nSubsidy = Coin.valueOf(512);
+
+        // Subsidy is reduced by 6% every 10080 blocks, which will occur approximately every 1 week
+        int exponent=(nHeight / 10080);
+        for(int i=0;i<exponent;i++){
+            nSubsidy=nSubsidy.multiply(47);
+            nSubsidy=nSubsidy.divide(50);
+        }
+        if(nSubsidy.compareTo(minimumSubsidy) < 0) {nSubsidy=minimumSubsidy;}
         return nSubsidy;
+    }
+    Coin GetBlockSubsidy120000(int nHeight)
+    {
+        // Subsidy is reduced by 10% every day (1440 blocks)
+        Coin nSubsidy = Coin.valueOf(250,0);
+        int exponent = ((nHeight - 120000) / 1440);
+        for(int i=0; i<exponent; i++)
+            nSubsidy = nSubsidy.multiply(45).divide(50);
+
+        return nSubsidy;
+    }
+
+    Coin GetBlockSubsidy150000(int nHeight)
+    {
+        // Subsidy is reduced by 1% every week (10080 blocks)
+        Coin nSubsidy = Coin.valueOf(25,0);
+        int exponent = ((nHeight - 150000) / 10080);
+        for(int i=0; i<exponent; i++)
+            nSubsidy = (nSubsidy.multiply(99).divide(100));
+
+        return nSubsidy.compareTo(minimumSubsidy) < 0 ? minimumSubsidy : nSubsidy;
+    }
+
+    public Coin GetBlockValue(int nHeight)
+    {
+        if(nHeight >= 150000)
+            return GetBlockSubsidy150000(nHeight);
+
+        if(nHeight >= 120000)
+            return GetBlockSubsidy120000(nHeight);
+
+        return GetBlockSubsidy(nHeight);
     }
 
     public static int subsidyDecreaseBlockCount = 4730400;     //main.cpp GetBlockValue(height, fee)
 
     public static BigInteger proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);  //main.cpp bnProofOfWorkLimit (~uint256(0) >> 20); // digitalcoin: starting difficulty is 1 / 2^12
-
-    public static BigInteger [] proofOfWorkLimits = new BigInteger[] {
-            proofOfWorkLimit,proofOfWorkLimit,proofOfWorkLimit,proofOfWorkLimit,proofOfWorkLimit };
-
-    public static BigInteger getProofOfWorkLimit(int algo)
-    {
-        return proofOfWorkLimits[algo];
-    }
 
     static public String[] testnetDnsSeeds = new String[] {
           "not supported"
