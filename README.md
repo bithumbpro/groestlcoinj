@@ -2,7 +2,7 @@ Build status: [![Build Status](https://travis-ci.org/bitcoinj/bitcoinj.png?branc
 
 ### Welcome to groestlcoinj
 
-The groestlcoinj library is a Java implementation of the GroestlCoin protocol, which allows it to maintain a wallet and send/receive transactions without needing a local copy of Bitcoin Core. It comes with full documentation and some example apps showing how to use it.
+The groestlcoinj library is a Java implementation of the GroestlCoin protocol, which allows it to maintain a wallet and send/receive transactions without needing a local copy of Groestlcoin Core. It comes with full documentation and some example apps showing how to use it.
 
 ### Technologies
 
@@ -39,18 +39,14 @@ These are found in the `examples` module.
 
 #### Forwarding service
 
-This will download the block chain and eventually print a Bitcoin address that it has generated.
+This will download the block chain and eventually print a Groestlcoin address that it has generated.
 
 If you send coins to that address, it will forward them on to the address you specified.
 
 ```
   cd examples
-  mvn exec:java -Dexec.mainClass=org.bitcoinj.examples.ForwardingService -Dexec.args="<insert a bitcoin address here>"
+  mvn exec:java -Dexec.mainClass=org.groestlcoinj.examples.ForwardingService -Dexec.args="<insert a groestlcoin address here>"
 ```
 
 Note that this example app *does not use checkpointing*, so the initial chain sync will be pretty slow. You can make an app that starts up and does the initial sync much faster by including a checkpoints file; see the documentation for
 more info on this technique.
-
-### Where next?
-
-Now you are ready to [follow the tutorial](https://bitcoinj.github.io/getting-started).
