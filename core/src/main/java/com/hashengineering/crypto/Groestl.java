@@ -87,10 +87,26 @@ public class Groestl {
 
     static byte [] groestl(byte header[])
     {
+        //digestGroestl.reset();
+        //byte [] hash512 = digestGroestl.digest(header);
+        //digestGroestl.reset();
+        //byte [] doubleHash512 = digestGroestl.digest(hash512);
+        //Initialize
+        //return new Sha512Hash(doubleHash512).trim256().getBytes();
+
+        Groestl512 hasher1 = new Groestl512();
+        Groestl512 hasher2 = new Groestl512();
+
+        /*digestGroestl.reset();
         byte [] hash512 = digestGroestl.digest(header);
+        //digestGroestl.reset();
         byte [] doubleHash512 = digestGroestl.digest(hash512);
         //Initialize
         return new Sha512Hash(doubleHash512).trim256().getBytes();
+        */
+        byte [] hash1 = hasher1.digest(header);
+        byte [] hash2 = hasher2.digest(hash1);
+        return new Sha512Hash(hash2).trim256().getBytes();
     }
 
     static byte [] groestl(byte header[], int offset, int length)

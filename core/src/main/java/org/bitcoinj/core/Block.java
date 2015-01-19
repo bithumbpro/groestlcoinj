@@ -681,12 +681,20 @@ public class Block extends Message {
 
 
         if (h.compareTo(target) > 0) {
+            //something might be strange here, recalculate
+  //          hash = calculateHash();
+  //          h = hash.toBigInteger();
+
+   //         if(h.compareTo(target) > 0)
+   //         {
+
             // Proof of work check failed!
-            if (throwException)
-                throw new VerificationException("Hash is higher than target: " + getHashAsString() + " vs "
-                        + target.toString(16));
-            else
-                return false;
+                if (throwException)
+                    throw new VerificationException("Hash is higher than target: " + getHashAsString() + " vs "
+                            + target.toString(16));
+                else
+                    return false;
+     //       }
         }
         return true;
     }

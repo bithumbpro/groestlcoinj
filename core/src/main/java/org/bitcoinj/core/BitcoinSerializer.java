@@ -216,8 +216,8 @@ public class BitcoinSerializer {
             message = new GetHeadersMessage(params, payloadBytes);
         } else if (command.equals("tx")) {
             Transaction tx = new Transaction(params, payloadBytes, null, parseLazy, parseRetain, length);
-            if (hash != null)
-                tx.setHash(new Sha256Hash(Utils.reverseBytes(hash)));
+            //if (hash != null)
+            //    tx.setHash(new Sha256Hash(Utils.reverseBytes(hash)));
             message = tx;
         } else if (command.equals("addr")) {
             message = new AddressMessage(params, payloadBytes, parseLazy, parseRetain, length);
