@@ -3,8 +3,8 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.google</groupId>
-  <artifactId>digitalcoinj-parent</artifactId>
-  <version>0.12-SNAPSHOT</version>
+  <artifactId>groestlcoinj-parent</artifactId>
+  <version>0.11.3</version>
   <packaging>pom</packaging>
 
   <modules>
