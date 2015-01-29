@@ -50,17 +50,10 @@ public class CoinDefinition {
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;  //108 blocks
 
     public static final int getIntervalCheckpoints() {
-            return 2016;    //1080
-
-
-    public static final int getInterval(int height, boolean testNet) {
-        if(height < nDifficultySwitchHeight)
-            return INTERVAL_0;    //1080
-        else if(height < nInflationFixHeight)
-            return INTERVAL_1;    //108
-        else
-            return INTERVAL;      //108
+        return 2016;    //1080
     }
+
+
     public static int spendableCoinbaseDepth = 120; //main.h: static const int CINBASE_MATURITY
     public static final int MAX_COINS = 105000000;                 //main.h:  MAX_MONEY
 	public static final BigInteger MAX_MONEY = BigInteger.valueOf(105000000).multiply(Utils.COIN);
@@ -138,12 +131,12 @@ public class CoinDefinition {
     public static final BigInteger GetBlockReward(int height)
     {
         int COIN = 1;
-        Coin nSubsidy = Coin.valueOf(15, 0);
+        BigInteger nSubsidy = Utils.toNanoCoins(15, 0);
         return nSubsidy.shiftRight(height / subsidyDecreaseBlockCount);
     }
-    static final BigInteger nGenesisBlockRewardCoin = Coin.valueOf(1,0);
-    static final BigInteger minimumSubsidy = Coin.valueOf(5,0);
-    static final BigInteger nPremine = Coin.valueOf(240640,0);
+    static final BigInteger nGenesisBlockRewardCoin = Utils.COIN;
+    static final BigInteger minimumSubsidy = Utils.COIN.multiply(BigInteger.valueOf(5));
+    static final BigInteger nPremine = Utils.COIN.multiply(BigInteger.valueOf(240640));
 
     BigInteger GetBlockSubsidy(int nHeight){
 
@@ -168,13 +161,13 @@ public class CoinDefinition {
 		*/
         }
 
-        Coin nSubsidy = Coin.valueOf(512);
+        BigInteger nSubsidy = Utils.toNanoCoins(512, 0);
 
         // Subsidy is reduced by 6% every 10080 blocks, which will occur approximately every 1 week
         int exponent=(nHeight / 10080);
         for(int i=0;i<exponent;i++){
-            nSubsidy=nSubsidy.multiply(47);
-            nSubsidy=nSubsidy.divide(50);
+            nSubsidy=nSubsidy.multiply(BigInteger.valueOf(47));
+            nSubsidy=nSubsidy.divide(BigInteger.valueOf(50));
         }
         if(nSubsidy.compareTo(minimumSubsidy) < 0) {nSubsidy=minimumSubsidy;}
         return nSubsidy;
@@ -182,10 +175,10 @@ public class CoinDefinition {
     BigInteger GetBlockSubsidy120000(int nHeight)
         {
         // Subsidy is reduced by 10% every day (1440 blocks)
-        Coin nSubsidy = Coin.valueOf(250,0);
+            BigInteger nSubsidy = Utils.toNanoCoins(250, 0);
         int exponent = ((nHeight - 120000) / 1440);
         for(int i=0; i<exponent; i++)
-            nSubsidy = nSubsidy.multiply(45).divide(50);
+            nSubsidy = nSubsidy.multiply(BigInteger.valueOf(45)).divide(BigInteger.valueOf(50));
 
         return nSubsidy;
         }
@@ -193,10 +186,10 @@ public class CoinDefinition {
     BigInteger GetBlockSubsidy150000(int nHeight)
         {
         // Subsidy is reduced by 1% every week (10080 blocks)
-        Coin nSubsidy = Coin.valueOf(25,0);
+            BigInteger nSubsidy = Utils.toNanoCoins(25, 0);
         int exponent = ((nHeight - 150000) / 10080);
         for(int i=0; i<exponent; i++)
-            nSubsidy = (nSubsidy.multiply(99).divide(100));
+            nSubsidy = (nSubsidy.multiply(BigInteger.valueOf(99)).divide(BigInteger.valueOf(100)));
 
         return nSubsidy.compareTo(minimumSubsidy) < 0 ? minimumSubsidy : nSubsidy;
         }

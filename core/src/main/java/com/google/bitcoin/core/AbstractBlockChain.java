@@ -932,7 +932,7 @@ public abstract class AbstractBlockChain {
         BigInteger PastDifficultyAveragePrev = BigInteger.ZERO;
 
         if (BlockLastSolved == null || BlockLastSolved.getHeight() == 0 || BlockLastSolved.getHeight() < PastBlocksMin) {
-            verifyDifficulty(params.getMaxTarget(), storedPrev, nextBlock);
+            verifyDifficulty(params.getProofOfWorkLimit(), storedPrev, nextBlock);
             return;
         }
 
@@ -1002,7 +1002,7 @@ public abstract class AbstractBlockChain {
 
         //if (BlockLastSolved == NULL || BlockLastSolved->nHeight == 0 || BlockLastSolved->nHeight < PastBlocksMin) { return bnProofOfWorkLimit.GetCompact(); }
         if (BlockLastSolved == null || BlockLastSolved.getHeight() == 0 || (long)BlockLastSolved.getHeight() < PastBlocksMin)
-        { verifyDifficulty(params.getMaxTarget(), storedPrev, nextBlock); return;}
+        { verifyDifficulty(params.getProofOfWorkLimit(), storedPrev, nextBlock); return;}
 
         for (int i = 1; BlockReading != null && BlockReading.getHeight() > 0; i++) {
             if (PastBlocksMax > 0 && i > PastBlocksMax)

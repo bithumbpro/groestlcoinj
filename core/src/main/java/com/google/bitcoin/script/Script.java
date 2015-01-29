@@ -21,6 +21,7 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.common.collect.Lists;
+import com.hashengineering.crypto.Groestl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.digests.RIPEMD160Digest;
@@ -34,8 +35,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
-import static com.google.bitcoin.script.ScriptOpCodes.*;
 import static com.google.bitcoin.core.Utils.bytesToHexString;
+import static com.google.bitcoin.script.ScriptOpCodes.*;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 

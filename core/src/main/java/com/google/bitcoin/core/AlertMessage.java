@@ -16,6 +16,8 @@
 
 package com.google.bitcoin.core;
 
+import com.hashengineering.crypto.Groestl;
+
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;

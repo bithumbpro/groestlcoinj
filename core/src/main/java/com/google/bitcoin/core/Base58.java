@@ -16,6 +16,8 @@
 
 package com.google.bitcoin.core;
 
+import com.hashengineering.crypto.Groestl;
+
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.util.Arrays;

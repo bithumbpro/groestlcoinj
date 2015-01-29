@@ -24,7 +24,6 @@ import com.google.common.primitives.Ints;
 import com.google.common.primitives.UnsignedLongs;
 import org.spongycastle.crypto.digests.RIPEMD160Digest;
 import org.spongycastle.util.encoders.Hex;
-import com.lambdaworks.crypto.SCrypt;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -192,14 +191,6 @@ public class Utils {
      */
     public static byte[] doubleDigest(byte[] input) {
         return doubleDigest(input, 0, input.length);
-    }
-
-    public static byte[] scryptDigest(byte[] input) {
-        try {
-            return SCrypt.scrypt(input, input, 1024, 1, 1, 32);
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     /**

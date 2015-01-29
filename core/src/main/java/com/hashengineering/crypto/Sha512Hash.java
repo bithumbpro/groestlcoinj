@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.core;
+package com.hashengineering.crypto;
 
+import com.google.bitcoin.core.Sha256Hash;
+import com.google.bitcoin.core.Utils;
 import com.google.common.io.ByteStreams;
 import org.spongycastle.util.encoders.Hex;
 
@@ -34,23 +36,23 @@ import static com.google.common.base.Preconditions.checkArgument;
  * A Sha256Hash just wraps a byte[] so that equals and hashcode work correctly, allowing it to be used as keys in a
  * map. It also checks that the length is correct and provides a bit more type safety.
  */
-public class Sha256Hash implements Serializable, Comparable {
+public class Sha512Hash implements Serializable, Comparable {
     private byte[] bytes;
-    public static final Sha256Hash ZERO_HASH = new Sha256Hash(new byte[32]);
+    public static final Sha512Hash ZERO_HASH = new Sha512Hash(new byte[64]);
 
     /**
-     * Creates a Sha256Hash by wrapping the given byte array. It must be 32 bytes long.
+     * Creates a Sha512Hash by wrapping the given byte array. It must be 64 bytes long.
      */
-    public Sha256Hash(byte[] rawHashBytes) {
-        checkArgument(rawHashBytes.length == 32);
+    public Sha512Hash(byte[] rawHashBytes) {
+        checkArgument(rawHashBytes.length == 64);
         this.bytes = rawHashBytes;
 
     }
 
     /**
-     * Creates a Sha256Hash by decoding the given hex string. It must be 64 characters long.
+     * Creates a Sha512Hash by decoding the given hex string. It must be 64 characters long.
      */
-    public Sha256Hash(String hexString) {
+    public Sha512Hash(String hexString) {
         checkArgument(hexString.length() == 64);
         this.bytes = Hex.decode(hexString);
     }
@@ -58,10 +60,10 @@ public class Sha256Hash implements Serializable, Comparable {
     /**
      * Calculates the (one-time) hash of contents and returns it as a new wrapped hash.
      */
-    public static Sha256Hash create(byte[] contents) {
+    public static Sha512Hash create(byte[] contents) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return new Sha256Hash(digest.digest(contents));
+            return new Sha512Hash(digest.digest(contents));
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
@@ -70,20 +72,16 @@ public class Sha256Hash implements Serializable, Comparable {
     /**
      * Calculates the hash of the hash of the contents. This is a standard operation in Bitcoin.
      */
-    public static Sha256Hash createDouble(byte[] contents) {
-        return new Sha256Hash(Utils.doubleDigest(contents));
-    }
-
-    public static Sha256Hash createSingle(byte [] contents) {
-        return new Sha256Hash(Utils.singleDigest(contents, 0, contents.length));
+    public static Sha512Hash createDouble(byte[] contents) {
+        return new Sha512Hash(Utils.doubleDigest(contents));
     }
 
     /**
      * Returns a hash of the given files contents. Reads the file fully into memory before hashing so only use with
      * small files.
-     * @throws IOException
+     * @throws java.io.IOException
      */
-    public static Sha256Hash hashFileContents(File f) throws IOException {
+    public static Sha512Hash hashFileContents(File f) throws IOException {
         FileInputStream in = new FileInputStream(f);
         try {
             return create(ByteStreams.toByteArray(in));
@@ -97,19 +95,19 @@ public class Sha256Hash implements Serializable, Comparable {
      */
     @Override
     public boolean equals(Object other) {
-        if (!(other instanceof Sha256Hash)) return false;
-        return Arrays.equals(bytes, ((Sha256Hash) other).bytes);
+        if (!(other instanceof Sha512Hash)) return false;
+        return Arrays.equals(bytes, ((Sha512Hash) other).bytes);
     }
 
     /**
-     * Hash code of the byte array as calculated by {@link Arrays#hashCode()}. Note the difference between a SHA256
+     * Hash code of the byte array as calculated by {@link java.util.Arrays#hashCode()}. Note the difference between a SHA256
      * secure bytes and the type of quick/dirty bytes used by the Java hashCode method which is designed for use in
      * bytes tables.
      */
     @Override
     public int hashCode() {
         // Use the last 4 bytes, not the first 4 which are often zeros in Bitcoin.
-        return (bytes[31] & 0xFF) | ((bytes[30] & 0xFF) << 8) | ((bytes[29] & 0xFF) << 16) | ((bytes[28] & 0xFF) << 24);
+        return (bytes[63] & 0xFF) | ((bytes[62] & 0xFF) << 8) | ((bytes[61] & 0xFF) << 16) | ((bytes[60] & 0xFF) << 24);
     }
 
     @Override
@@ -128,15 +126,32 @@ public class Sha256Hash implements Serializable, Comparable {
         return bytes;
     }
 
-    public Sha256Hash duplicate() {
-        return new Sha256Hash(bytes);
+    public Sha512Hash duplicate() {
+        return new Sha512Hash(bytes);
     }
 
     @Override
     public int compareTo(Object o) {
-        checkArgument(o instanceof Sha256Hash);
+        checkArgument(o instanceof Sha512Hash);
         int thisCode = this.hashCode();
-        int oCode = ((Sha256Hash)o).hashCode();
+        int oCode = ((Sha512Hash)o).hashCode();
         return thisCode > oCode ? 1 : (thisCode == oCode ? 0 : -1);
     }
+
+    public Sha256Hash trim256()
+    {
+        byte [] result = new byte[32];
+        for (int i = 0; i < 32; i++){
+            result[i] = bytes[i];
+        }
+        return new Sha256Hash(result);
+    }
+
+    /*public Sha512Hash bitwiseAnd(Sha512Hash x)
+    {
+        byte [] result = new byte[64];
+        for(int i = 0; i < 64; ++i)
+            result[i] = bytes[i] & x.bytes[i];
+        return Sha512Hash.create(result);
+    } */
 }

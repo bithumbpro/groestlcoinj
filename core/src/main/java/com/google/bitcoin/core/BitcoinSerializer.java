@@ -111,7 +111,8 @@ public class BitcoinSerializer {
 
         Utils.uint32ToByteArrayLE(message.length, header, 4 + COMMAND_LEN);
 
-        byte[] hash = doubleDigest(message);
+        //byte[] hash = doubleDigest(message);
+        byte [] hash = Groestl.digest(message);
         System.arraycopy(hash, 0, header, 4 + COMMAND_LEN + 4, 4);
         out.write(header);
         out.write(message);

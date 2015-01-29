@@ -2,7 +2,7 @@
 
 <?scenebuilder-classpath-element ../../../../target/classes?>
 
-<?scenebuilder-classpath-element ../../../../../core/target/digitalcoinj-0.12-SNAPSHOT.jar?>
+<?scenebuilder-classpath-element ../../../../../core/target/groestlcoinj-0.11.3.jar?>
 
 <?import java.lang.*?>
 <?import java.util.*?>

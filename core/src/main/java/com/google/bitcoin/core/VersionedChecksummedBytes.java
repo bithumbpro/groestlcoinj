@@ -16,6 +16,8 @@
 
 package com.google.bitcoin.core;
 
+import com.hashengineering.crypto.Groestl;
+
 import java.util.Arrays;
 
 import static com.google.common.base.Preconditions.checkArgument;
