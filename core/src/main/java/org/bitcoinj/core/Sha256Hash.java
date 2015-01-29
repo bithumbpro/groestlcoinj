@@ -73,7 +73,9 @@ public class Sha256Hash implements Serializable, Comparable<Sha256Hash> {
     public static Sha256Hash createDouble(byte[] contents) {
         return new Sha256Hash(Utils.doubleDigest(contents));
     }
-
+    public static Sha256Hash createSingle(byte[] contents) {
+        return new Sha256Hash(Utils.singleDigest(contents, 0, contents.length));
+    }
     /**
      * Returns a hash of the given files contents. Reads the file fully into memory before hashing so only use with
      * small files.
