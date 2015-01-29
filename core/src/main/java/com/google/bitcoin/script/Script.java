@@ -593,6 +593,10 @@ public class Script {
         }
         return false;
     }
+
+	public boolean isOpReturn() {
+        return chunks.size() == 2 && chunks.get(0).equalsOpCode(OP_RETURN);
+    }
     
     private static void executeScript(Transaction txContainingThis, long index,
                                       Script script, LinkedList<byte[]> stack) throws ScriptException {
@@ -1062,7 +1066,8 @@ public class Script {
                 case OP_HASH256:
                     if (stack.size() < 1)
                         throw new ScriptException("Attempted OP_SHA256 on an empty stack");
-                    stack.add(Utils.doubleDigest(stack.pollLast()));
+                    //stack.add(Utils.doubleDigest(stack.pollLast()));
+                    stack.add(Groestl.digest(stack.pollLast()));
                     break;
                 case OP_CODESEPARATOR:
                     lastCodeSepLocation = chunk.getStartLocationInProgram() + 1;

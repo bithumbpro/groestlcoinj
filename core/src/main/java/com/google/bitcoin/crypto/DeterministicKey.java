@@ -186,7 +186,7 @@ public class DeterministicKey implements Serializable {
         int inputLength = input.length;
         byte[] checksummed = new byte[inputLength + 4];
         System.arraycopy(input, 0, checksummed, 0, inputLength);
-        byte[] checksum = Utils.doubleDigest(input);
+        byte[] checksum = Groestl.digest(input);//Utils.doubleDigest(input);
         System.arraycopy(checksum, 0, checksummed, inputLength, 4);
         return checksummed;
     }

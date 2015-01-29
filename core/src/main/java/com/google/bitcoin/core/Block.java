@@ -21,6 +21,7 @@ import com.google.bitcoin.script.ScriptBuilder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.hashengineering.crypto.Groestl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -193,7 +194,7 @@ public class Block extends Message {
         difficultyTarget = readUint32();
         nonce = readUint32();
 
-        hash = new Sha256Hash(Utils.reverseBytes(Utils.doubleDigest(bytes, offset, cursor)));
+        hash = new Sha256Hash(Utils.reverseBytes(Groestl.digest(payload, offset, cursor)/*Utils.doubleDigest(payload, offset, cursor)*/));
 
         headerParsed = true;
         headerBytesValid = parseRetain;
@@ -513,7 +514,7 @@ public class Block extends Message {
         }
     }
 
-    private Sha256Hash calculateScryptHash() {
+    /*private Sha256Hash calculateScryptHash() {
         try {
             ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
             writeHeader(bos);
@@ -521,16 +522,8 @@ public class Block extends Message {
         } catch (IOException e) {
             throw new RuntimeException(e); // Cannot happen.
         }
-    }
-    private Sha256Hash calculateX11Hash() {
-        try {
-            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
-            writeHeader(bos);
-            return new Sha256Hash(Utils.reverseBytes(x11Digest(bos.toByteArray())));
-        } catch (IOException e) {
-            throw new RuntimeException(e); // Cannot happen.
-        }
-    }
+    }*/
+
     /**
      * Returns the hash of the block (which for a valid, solved block should be below the target) in the form seen on
      * the block explorer. If you call this on block 1 in the production chain
@@ -540,9 +533,9 @@ public class Block extends Message {
         return getHash().toString();
     }
 
-    public String getScryptHashAsString() {
+    /*public String getScryptHashAsString() {
         return getScryptHash().toString();
-    }
+    }*/
 
     /**
      * Returns the hash of the block (which for a valid, solved block should be
@@ -554,17 +547,11 @@ public class Block extends Message {
         return hash;
     }
 
-    public Sha256Hash getScryptHash() {
+/*    public Sha256Hash getScryptHash() {
         if (scryptHash == null)
             scryptHash = calculateScryptHash();
         return scryptHash;
-    }
-
-    public Sha256Hash getX11Hash() {
-        if (scryptHash == null)
-            scryptHash = calculateX11Hash();
-        return scryptHash;
-    }
+    }*/
 
 
     /**
@@ -683,26 +670,9 @@ public class Block extends Message {
         // field is of the right value. This requires us to have the preceeding blocks.
         BigInteger target = getDifficultyTargetAsInteger();
         BigInteger h = null;
-        int algo = getAlgo();
 
-        switch (algo)
-        {
-            case ALGO_SHA256D:
                 h = getHash().toBigInteger();
-                break;
-            case ALGO_SCRYPT:
-            {
-                h = getScryptHash().toBigInteger();
-                break;
-            }
-            case ALGO_X11:
-                h = getX11Hash().toBigInteger();
 
-                break;
-            default:
-                h = getHash().toBigInteger();
-                break;
-        }
 
         if (h.compareTo(target) > 0) {
             // Proof of work check failed!
@@ -1173,4 +1143,9 @@ public class Block extends Message {
     String [] algoNames = {"sha256d", "scrypt", "x11"};
 
     public String getAlgoName() { return algoNames[GetAlgo(version)]; }
+
+    public void setVersion(int v)
+    {
+        version = v;
+    }
 }
