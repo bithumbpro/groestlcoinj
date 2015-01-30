@@ -25,15 +25,15 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>digitalcoinj-examples</artifactId>
+    <artifactId>groestlcoinj-examples</artifactId>
 
-    <name>digitalcoinj Examples</name>
-    <description>A collection of examples using the digitalcoinj library</description>
+    <name>groestlcoinj Examples</name>
+    <description>A collection of examples using the groestlcoinj library</description>
 
     <dependencies>
         <dependency>
             <groupId>com.google</groupId>
-            <artifactId>digitalcoinj</artifactId>
+            <artifactId>groestlcoinj</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>
