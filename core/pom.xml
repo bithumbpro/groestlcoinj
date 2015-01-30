@@ -25,10 +25,10 @@
         <version>0.11.3</version>
     </parent>
 
-    <artifactId>digitalcoinj</artifactId>
+    <artifactId>groestlcoinj</artifactId>
 
-    <name>digitalcoinj</name>
-    <description>A Java digitalcoin library</description>
+    <name>groestlcoinj</name>
+    <description>A Java GroestlCoin library</description>
 
     <packaging>jar</packaging>
 
