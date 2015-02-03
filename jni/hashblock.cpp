@@ -8,7 +8,7 @@
 
 
 
-jbyteArray JNICALL hash11_native(JNIEnv *env, jclass cls, jbyteArray header)
+jbyteArray JNICALL groestld_native(JNIEnv *env, jclass cls, jbyteArray header, jint offset, jint length)
 {
     jint Plen = (env)->GetArrayLength(header);
     jbyte *P = (env)->GetByteArrayElements(header, NULL);
@@ -18,7 +18,7 @@ jbyteArray JNICALL hash11_native(JNIEnv *env, jclass cls, jbyteArray header)
     if (P)
 	{
 	
-	uint256 result = HashX11(P, P+Plen);
+	uint256 result = HashGroestl(P+offset, P+length+offset);
 
     /*if (crypto_scrypt((uint8_t *) P, Plen, (uint8_t *) S, Slen, N, r, p, buf, dkLen)) {
         jclass e = (*env)->FindClass(env, "java/lang/IllegalArgumentException");
@@ -52,7 +52,7 @@ jbyteArray JNICALL hash11_native(JNIEnv *env, jclass cls, jbyteArray header)
 }
 
 static const JNINativeMethod methods[] = {
-    { "x11_native", "([B)[B", (void *) hash11_native }
+    { "groestld_native", "([BII)[B", (void *) groestld_native }
 };
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {
@@ -62,7 +62,7 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
         return -1;
     }
 
-    jclass cls = (env)->FindClass("com/hashengineering/crypto/X11");
+    jclass cls = (env)->FindClass("com/hashengineering/crypto/Groestl");
     int r = (env)->RegisterNatives(cls, methods, 1);
 
     return (r == JNI_OK) ? JNI_VERSION_1_6 : -1;
