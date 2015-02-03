@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.testing;
+package com.google.bitcoin.utils;
 
 import com.google.bitcoin.core.Transaction;
 import com.google.bitcoin.core.TransactionBroadcaster;
 import com.google.bitcoin.core.VerificationException;
 import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.utils.Threading;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.SettableFuture;
@@ -30,39 +29,31 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A mock transaction broadcaster can be used in unit tests as a stand-in for a PeerGroup. It catches any transactions
- * broadcast through it and makes them available via the {@link #waitForTransaction()} method. Using that will cause
- * the broadcast to be seen as if it never propagated though, so you may instead use {@link #waitForTxFuture()} and then
- * set the returned future when you want the "broadcast" to be completed.
+ * broadcast through it and makes them available via the {@link #broadcasts} member. Reading from that
+ * {@link LinkedBlockingQueue} will block the thread until a transaction is available.
  */
 public class MockTransactionBroadcaster implements TransactionBroadcaster {
     private final ReentrantLock lock = Threading.lock("mock tx broadcaster");
     private final Wallet wallet;
 
     public static class TxFuturePair {
-        public final Transaction tx;
-        public final SettableFuture<Transaction> future;
+        public Transaction tx;
+        public SettableFuture<Transaction> future;
 
         public TxFuturePair(Transaction tx, SettableFuture<Transaction> future) {
             this.tx = tx;
             this.future = future;
         }
-
-        /** Tells the broadcasting code that the broadcast was a success, just does future.set(tx) */
-        public void succeed() {
-            future.set(tx);
-        }
     }
 
     private final LinkedBlockingQueue<TxFuturePair> broadcasts = new LinkedBlockingQueue<TxFuturePair>();
 
-    /** Sets this mock broadcaster on the given wallet. */
     public MockTransactionBroadcaster(Wallet wallet) {
         // This code achieves nothing directly, but it sets up the broadcaster/peergroup > wallet lock ordering
         // so inversions can be caught.
         lock.lock();
         try {
             this.wallet = wallet;
-            wallet.setTransactionBroadcaster(this);
             wallet.getPendingTransactions();
         } finally {
             lock.unlock();

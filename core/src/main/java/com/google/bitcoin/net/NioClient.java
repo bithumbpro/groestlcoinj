@@ -49,7 +49,7 @@ public class NioClient implements MessageWriteTarget {
         @Override
         public void connectionClosed() {
             upstreamParser.connectionClosed();
-            manager.stopAsync();
+            manager.stop();
         }
 
         @Override
@@ -91,8 +91,7 @@ public class NioClient implements MessageWriteTarget {
      */
     public NioClient(final SocketAddress serverAddress, final StreamParser parser,
                      final int connectTimeoutMillis) throws IOException {
-        manager.startAsync();
-        manager.awaitRunning();
+        manager.startAndWait();
         handler = new Handler(parser, connectTimeoutMillis);
         manager.openConnection(serverAddress, handler);
     }

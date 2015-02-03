@@ -14,21 +14,19 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.testing;
+package com.google.bitcoin.utils;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.MemoryBlockStore;
-import com.google.bitcoin.testing.FakeTxBuilder;
-import com.google.bitcoin.utils.BriefLogFormatter;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.math.BigInteger;
 
-import static com.google.bitcoin.testing.FakeTxBuilder.createFakeBlock;
-import static com.google.bitcoin.testing.FakeTxBuilder.createFakeTx;
+import static com.google.bitcoin.utils.TestUtils.createFakeBlock;
+import static com.google.bitcoin.utils.TestUtils.createFakeTx;
 
 // TODO: This needs to be somewhat rewritten - the "sendMoneyToWallet" methods aren't sending via the block chain object
 
@@ -71,7 +69,7 @@ public class TestWithWallet {
             if (wallet.isPendingTransactionRelevant(tx))
                 wallet.receivePending(tx, null);
         } else {
-            FakeTxBuilder.BlockPair bp = createFakeBlock(blockStore, tx);
+            TestUtils.BlockPair bp = createFakeBlock(blockStore, tx);
             wallet.receiveFromBlock(tx, bp.storedBlock, type, 0);
             if (type == AbstractBlockChain.NewBlockType.BEST_CHAIN)
                 wallet.notifyNewBestBlock(bp.storedBlock);

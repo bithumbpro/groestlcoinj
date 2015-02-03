@@ -62,7 +62,7 @@ public class DeterministicKey implements Serializable {
         this.parent = parent;
         this.childNumberPath = childNumberPath;
         this.chainCode = Arrays.copyOf(chainCode, chainCode.length);
-        this.publicAsPoint = publicAsPoint == null ? null : publicAsPoint.normalize();
+        this.publicAsPoint = publicAsPoint == null ? null : HDUtils.compressedCopy(publicAsPoint);
         this.privateAsFieldElement = privateKeyFieldElt;
     }
 
@@ -110,13 +110,13 @@ public class DeterministicKey implements Serializable {
     ECPoint getPubPoint() {
         if (publicAsPoint == null) {
             checkNotNull(privateAsFieldElement);
-            publicAsPoint = ECKey.CURVE.getG().multiply(privateAsFieldElement).normalize();
+            publicAsPoint = ECKey.CURVE.getG().multiply(privateAsFieldElement);
         }
-        return publicAsPoint;
+        return HDUtils.compressedCopy(publicAsPoint);
     }
 
     public byte[] getPubKeyBytes() {
-        return getPubPoint().getEncoded(true);
+        return getPubPoint().getEncoded();
     }
 
 

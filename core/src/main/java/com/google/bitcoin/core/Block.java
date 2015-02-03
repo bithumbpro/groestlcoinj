@@ -86,7 +86,6 @@ public class Block extends Message {
 
     /** Stores the hash of the block. If null, getHash() will recalculate it. */
     private transient Sha256Hash hash;
-    private transient Sha256Hash scryptHash;
 
     private transient boolean headerParsed;
     private transient boolean transactionsParsed;
@@ -650,7 +649,7 @@ public class Block extends Message {
     public BigInteger getDifficultyTargetAsInteger() throws VerificationException {
         maybeParseHeader();
         BigInteger target = Utils.decodeCompactBits(difficultyTarget);
-        if (target.signum() <= 0 || target.compareTo(params.proofOfWorkLimit) > 0)
+        if (target.compareTo(BigInteger.ZERO) <= 0 || target.compareTo(params.proofOfWorkLimit) > 0)
             throw new VerificationException("Difficulty target is bad: " + target.toString());
         return target;
     }
@@ -685,7 +684,7 @@ public class Block extends Message {
     private void checkTimestamp() throws VerificationException {
         maybeParseHeader();
         // Allow injection of a fake clock to allow unit testing.
-        long currentTime = Utils.currentTimeSeconds();
+        long currentTime = Utils.currentTimeMillis()/1000;
         if (time > currentTime + ALLOWED_TIME_DRIFT)
             throw new VerificationException("Block too far in future");
     }
@@ -905,7 +904,6 @@ public class Block extends Message {
         unCacheHeader();
         this.prevBlockHash = prevBlockHash;
         this.hash = null;
-        this.scryptHash = null;
     }
 
     /**
@@ -928,7 +926,6 @@ public class Block extends Message {
         unCacheHeader();
         this.time = time;
         this.hash = null;
-        this.scryptHash = null;
     }
 
     /**
@@ -950,7 +947,6 @@ public class Block extends Message {
         unCacheHeader();
         this.difficultyTarget = compactForm;
         this.hash = null;
-        this.scryptHash = null;
     }
 
     /**
@@ -967,7 +963,6 @@ public class Block extends Message {
         unCacheHeader();
         this.nonce = nonce;
         this.hash = null;
-        this.scryptHash = null;
     }
 
     /** Returns an immutable list of transactions held in this block. */
@@ -1059,12 +1054,12 @@ public class Block extends Message {
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, TransactionOutPoint prevOut) {
-        return createNextBlock(to, prevOut, Utils.currentTimeSeconds(), EMPTY_BYTES, Utils.toNanoCoins(50, 0));
+        return createNextBlock(to, prevOut, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
     }
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, BigInteger value) {
-        return createNextBlock(to, null, Utils.currentTimeSeconds(), EMPTY_BYTES, value);
+        return createNextBlock(to, null, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, value);
     }
 
     @VisibleForTesting
@@ -1074,7 +1069,7 @@ public class Block extends Message {
 
     @VisibleForTesting
     public Block createNextBlockWithCoinbase(byte[] pubKey, BigInteger coinbaseValue) {
-        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, coinbaseValue);
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, coinbaseValue);
     }
 
     /**
@@ -1083,7 +1078,7 @@ public class Block extends Message {
      */
     @VisibleForTesting
     Block createNextBlockWithCoinbase(byte[] pubKey) {
-        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, Utils.toNanoCoins(50, 0));
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, Utils.toNanoCoins(50, 0));
     }
 
     @VisibleForTesting
@@ -1105,44 +1100,7 @@ public class Block extends Message {
     boolean isTransactionBytesValid() {
         return transactionBytesValid;
     }
-
-    public static final int ALGO_SHA256D = 0;
-    public static final int ALGO_SCRYPT  = 1;
-    public static final int ALGO_X11 = 2;
-    public static final int NUM_ALGOS = 3;
-
-    public static int BLOCK_VERSION_DEFAULT = 1;
-
-    // algo
-    public static final int             BLOCK_VERSION_ALGO           = (7 << 9);
-    public static final int             BLOCK_VERSION_SHA256D         = (1 << 9);
-    public static final int             BLOCK_VERSION_X11        = (2 << 9);
-
-
-    public static int GetAlgo(long nVersion)
-    {
-        switch ((int)nVersion & BLOCK_VERSION_ALGO)
-        {
-            case 1:
-                return ALGO_SCRYPT;
-            case BLOCK_VERSION_SHA256D:
-                return ALGO_SHA256D;
-            case BLOCK_VERSION_X11:
-                return ALGO_X11;
-        }
-        return ALGO_SCRYPT;
-    }
-
-    public int getAlgo()
-    {
-        return GetAlgo(version);
-    }
-    String [] algoNames = {"sha256d", "scrypt", "x11"};
-
-    public String getAlgoName() { return algoNames[GetAlgo(version)]; }
-
-    public void setVersion(int v)
-    {
-        version = v;
-    }
+	public void setVersion(int version) {
+		this.version = version;
+	}
 }

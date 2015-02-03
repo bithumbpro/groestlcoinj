@@ -244,12 +244,10 @@ public class TransactionConfidence implements Serializable {
      * transaction becomes available.
      */
     public synchronized void setConfidenceType(ConfidenceType confidenceType) {
+        // Don't inform the event listeners if the confidence didn't really change.
         if (confidenceType == this.confidenceType)
             return;
         this.confidenceType = confidenceType;
-        if (confidenceType != ConfidenceType.DEAD) {
-            overridingTransaction = null;
-        }
         if (confidenceType == ConfidenceType.PENDING) {
             depth = 0;
             appearedAtChainHeight = -1;

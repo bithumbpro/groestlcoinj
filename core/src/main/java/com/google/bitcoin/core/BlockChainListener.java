@@ -82,7 +82,7 @@ public interface BlockChainListener {
      * compared to the relativity count of another transaction received inside the same block. It is used to establish
      * an ordering of transactions relative to one another.</p>
      */
-    void notifyTransactionIsInBlock(Sha256Hash txHash, StoredBlock block,
+    boolean notifyTransactionIsInBlock(Sha256Hash txHash, StoredBlock block,
                                     BlockChain.NewBlockType blockType,
                                     int relativityOffset) throws VerificationException;
 }

@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.testing;
+package com.google.bitcoin.utils;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.BlockStoreException;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 
-public class FakeTxBuilder {
-    public static Transaction createFakeTxWithChangeAddress(NetworkParameters params, BigInteger nanocoins, Address to, Address changeOutput) {
+public class TestUtils {
+    public static Transaction createFakeTxWithChangeAddress(NetworkParameters params, BigInteger nanocoins, Address to, Address changeOutput)
+            throws IOException, ProtocolException {
         // Create a fake TX of sufficient realism to exercise the unit tests. Two outputs, one to us, one to somewhere
         // else to simulate change.
         Transaction t = new Transaction(params);
@@ -45,11 +47,11 @@ public class FakeTxBuilder {
         return roundTripTransaction(params, t);
     }
 
-    public static Transaction createFakeTx(NetworkParameters params, BigInteger nanocoins, Address to) {
+    public static Transaction createFakeTx(NetworkParameters params, BigInteger nanocoins, Address to) throws IOException, ProtocolException {
         return createFakeTxWithChangeAddress(params, nanocoins, to, new ECKey().toAddress(params));
     }
 
-    public static Transaction createFakeTx(NetworkParameters params, BigInteger nanocoins, ECKey to) {
+    public static Transaction createFakeTx(NetworkParameters params, BigInteger nanocoins, ECKey to) throws IOException, ProtocolException {
         // Create a fake TX of sufficient realism to exercise the unit tests. Two outputs, one to us, one to somewhere
         // else to simulate change.
         Transaction t = new Transaction(params);
@@ -72,7 +74,7 @@ public class FakeTxBuilder {
      * @return Transaction[] Transaction[0] is a feeder transaction, supplying BTC to Transaction[1]
      */
     public static Transaction[] createFakeTx(NetworkParameters params, BigInteger nanocoins,
-                                             Address to, Address from) {
+                                             Address to, Address from) throws IOException, ProtocolException {
         // Create fake TXes of sufficient realism to exercise the unit tests. This transaction send BTC from the
         // from address, to the to address with to one to somewhere else to simulate change.
         Transaction t = new Transaction(params);
@@ -102,15 +104,11 @@ public class FakeTxBuilder {
     /**
      * Roundtrip a transaction so that it appears as if it has just come from the wire
      */
-    public static Transaction roundTripTransaction(NetworkParameters params, Transaction tx) {
-        try {
-            BitcoinSerializer bs = new BitcoinSerializer(params);
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            bs.serialize(tx, bos);
-            return (Transaction) bs.deserialize(ByteBuffer.wrap(bos.toByteArray()));
-        } catch (IOException e) {
-            throw new RuntimeException(e);   // Should not happen.
-        }
+    public static Transaction roundTripTransaction(NetworkParameters params, Transaction tx) throws IOException, ProtocolException {
+        BitcoinSerializer bs = new BitcoinSerializer(params);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        bs.serialize(tx, bos);
+        return (Transaction) bs.deserialize(ByteBuffer.wrap(bos.toByteArray()));
     }
 
     public static class DoubleSpends {
@@ -180,7 +178,7 @@ public class FakeTxBuilder {
     }
 
     public static BlockPair createFakeBlock(BlockStore blockStore, Transaction... transactions) {
-        return createFakeBlock(blockStore, Utils.currentTimeSeconds(), transactions);
+        return createFakeBlock(blockStore, Utils.currentTimeMillis() / 1000, transactions);
     }
 
     public static Block makeSolvedTestBlock(BlockStore blockStore, Address coinsTo) throws BlockStoreException {

@@ -296,29 +296,4 @@ public class SPVBlockStore implements BlockStore {
         checkArgument(newCursor >= 0);
         buffer.putInt(4, newCursor);
     }
-    final int nMedianTimeSpan=11;
-
-    public long getMedianTimePast(StoredBlock block) throws BlockStoreException
-    {
-        long [] median = new long[nMedianTimeSpan];
-        //int64_t* pbegin = &pmedian[nMedianTimeSpan];
-        //int64_t* pend = &pmedian[nMedianTimeSpan];
-
-        StoredBlock cursor = block;
-        //for (int i = 0; i < nMedianTimeSpan && pindex; i++, pindex = pindex->pprev)
-        for (int i = 0; i < nMedianTimeSpan && block != null; ++i)
-        {
-            median[nMedianTimeSpan - 1 - i] = cursor.getHeader().getTimeSeconds();
-            //*(--pbegin) = pindex->GetBlockTime();
-
-
-            cursor = cursor.getPrev(this);
-
-
-        }
-        java.util.Arrays.sort(median);
-        //std::sort(pbegin, pend);
-        return median[nMedianTimeSpan/2];
-        //return pbegin[(pend - pbegin)/2];
-    }
 }

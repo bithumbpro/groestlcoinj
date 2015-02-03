@@ -17,32 +17,25 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.net.BlockingClientManager;
 import com.google.bitcoin.net.ClientConnectionManager;
+import com.google.bitcoin.net.FilterMerger;
 import com.google.bitcoin.net.NioClientManager;
 import com.google.bitcoin.net.discovery.PeerDiscovery;
 import com.google.bitcoin.net.discovery.PeerDiscoveryException;
-import com.google.bitcoin.net.discovery.TorDiscovery;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.utils.ExponentialBackoff;
 import com.google.bitcoin.utils.ListenerRegistration;
 import com.google.bitcoin.utils.Threading;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
-import com.google.common.primitives.Ints;
-import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.*;
-import com.subgraph.orchid.Tor;
-import com.subgraph.orchid.TorClient;
 import net.jcip.annotations.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -76,10 +69,9 @@ import static com.google.common.base.Preconditions.checkState;
  * network IO, but starting and stopping the service should be fine.</p>
  */
 public class PeerGroup extends AbstractExecutionThreadService implements TransactionBroadcaster {
-    private static final Logger log = LoggerFactory.getLogger(PeerGroup.class);
     private static final int DEFAULT_CONNECTIONS = 4;
-    private static final int TOR_TIMEOUT_SECONDS = 20;
 
+    private static final Logger log = LoggerFactory.getLogger(PeerGroup.class);
     protected final ReentrantLock lock = Threading.lock("peergroup");
 
     // Addresses to try to connect to, excluding active peers.
@@ -91,7 +83,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     // Currently connecting peers.
     private final CopyOnWriteArrayList<Peer> pendingPeers;
     private final ClientConnectionManager channels;
-    @Nullable private final TorClient torClient;
 
     // The peer that has been selected for the purposes of downloading announced data.
     @GuardedBy("lock") private Peer downloadPeer;
@@ -103,8 +94,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     private final CopyOnWriteArraySet<PeerDiscovery> peerDiscoverers;
     // The version message to use for new connections.
     @GuardedBy("lock") private VersionMessage versionMessage;
-    // Switch for enabling download of pending transaction dependencies.
-    @GuardedBy("lock") private boolean downloadTxDependencies;
     // A class that tracks recent transactions that have been broadcast across the network, counts how many
     // peers announced them and updates the transaction confidence data. It is passed to each Peer.
     private final MemoryPool memoryPool;
@@ -138,7 +127,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         @Override
         public void onBlocksDownloaded(Peer peer, Block block, int blocksLeft) {
             double rate = checkNotNull(chain).getFalsePositiveRate();
-            if (rate > bloomFilterFPRate * MAX_FP_RATE_INCREASE) {
+            if (rate > bloomFilterMerger.getBloomFilterFPRate() * MAX_FP_RATE_INCREASE) {
                 log.info("Force update Bloom filter due to high false positive rate");
                 recalculateFastCatchupAndFilter(FilterRecalculateMode.FORCE_SEND);
             }
@@ -240,8 +229,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     // Visible for testing
     PeerEventListener startupListener = new PeerStartupListener();
 
-    // A bloom filter generated from all connected wallets that is given to new peers
-    private BloomFilter bloomFilter;
     /**
      * <p>A reasonable default for the bloom filter false positive rate on mainnet. FP rates are values between 0.0 and 1.0
      * where 1.0 is "all transactions" i.e. 100%.</p>
@@ -252,11 +239,9 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     public static final double DEFAULT_BLOOM_FILTER_FP_RATE = 0.0005;
     /** Maximum increase in FP rate before forced refresh of the bloom filter */
     public static final double MAX_FP_RATE_INCREASE = 2.0f;
-    // The false positive rate for bloomFilter
-    private double bloomFilterFPRate = DEFAULT_BLOOM_FILTER_FP_RATE;
-    // We use a constant tweak to avoid giving up privacy when we regenerate our filter with new keys
-    private final long bloomFilterTweak = (long) (Math.random() * Long.MAX_VALUE);
-    private int lastBloomFilterElementCount;
+    // An object that calculates bloom filters given a list of filter providers, whilst tracking some state useful
+    // for privacy purposes.
+    private FilterMerger bloomFilterMerger;
 
     /** The default timeout between when a connection attempt begins and version message exchange completes */
     public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 5000;
@@ -283,50 +268,15 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     }
 
     /**
-     * <p>Creates a PeerGroup that accesses the network via the Tor network. The provided TorClient is used so you can
-     * preconfigure it beforehand. It should not have been already started. You can just use "new TorClient()" if
-     * you don't have any particular configuration requirements.</p>
-     *
-     * <p>Peer discovery is automatically configured to use DNS seeds resolved via a random selection of exit nodes.
-     * If running on the Oracle JDK the unlimited strength jurisdiction checks will also be overridden,
-     * as they no longer apply anyway and can cause startup failures due to the requirement for AES-256.</p>
-     *
-     * <p>The user does not need any additional software for this: it's all pure Java. As of April 2014 <b>this mode
-     * is experimental</b>.</p>
-     *
-     * @throws java.util.concurrent.TimeoutException if Tor fails to start within 20 seconds.
-     */
-    public static PeerGroup newWithTor(NetworkParameters params, @Nullable AbstractBlockChain chain, TorClient torClient) throws TimeoutException {
-        checkNotNull(torClient);
-        maybeDisableExportControls();
-        BlockingClientManager manager = new BlockingClientManager(torClient.getSocketFactory());
-        final int CONNECT_TIMEOUT_MSEC = TOR_TIMEOUT_SECONDS * 1000;
-        manager.setConnectTimeoutMillis(CONNECT_TIMEOUT_MSEC);
-        PeerGroup result = new PeerGroup(params, chain, manager, torClient);
-        result.setConnectTimeoutMillis(CONNECT_TIMEOUT_MSEC);
-        result.addPeerDiscovery(new TorDiscovery(params, torClient));
-        return result;
-    }
-
-    /**
      * Creates a new PeerGroup allowing you to specify the {@link ClientConnectionManager} which is used to create new
      * connections and keep track of existing ones.
      */
     public PeerGroup(NetworkParameters params, @Nullable AbstractBlockChain chain, ClientConnectionManager connectionManager) {
-        this(params, chain, connectionManager, null);
-    }
-
-    /**
-     * Creates a new PeerGroup allowing you to specify the {@link ClientConnectionManager} which is used to create new
-     * connections and keep track of existing ones.
-     */
-    private PeerGroup(NetworkParameters params, @Nullable AbstractBlockChain chain, ClientConnectionManager connectionManager, @Nullable TorClient torClient) {
         this.params = checkNotNull(params);
         this.chain = chain;
         this.fastCatchupTimeSecs = params.getGenesisBlock().getTimeSeconds();
         this.wallets = new CopyOnWriteArrayList<Wallet>();
         this.peerFilterProviders = new CopyOnWriteArrayList<PeerFilterProvider>();
-        this.torClient = torClient;
 
         // This default sentinel value will be overridden by one of two actions:
         //   - adding a peer discovery source sets it to the default
@@ -336,7 +286,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         int height = chain == null ? 0 : chain.getBestChainHeight();
         // We never request that the remote node wait for a bloom filter yet, as we have no wallets
         this.versionMessage = new VersionMessage(params, height, true);
-        this.downloadTxDependencies = true;
 
         memoryPool = new MemoryPool();
 
@@ -346,7 +295,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
                 int result = backoffMap.get(a).compareTo(backoffMap.get(b));
                 // Sort by port if otherwise equals - for testing
                 if (result == 0)
-                    result = Ints.compare(a.getPort(), b.getPort());
+                    result = Integer.valueOf(a.getPort()).compareTo(b.getPort());
                 return result;
             }
         });
@@ -357,6 +306,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         peerDiscoverers = new CopyOnWriteArraySet<PeerDiscovery>();
         peerEventListeners = new CopyOnWriteArrayList<ListenerRegistration<PeerEventListener>>();
         runningBroadcasts = Collections.synchronizedSet(new HashSet<TransactionBroadcast>());
+        bloomFilterMerger = new FilterMerger(DEFAULT_BLOOM_FILTER_FP_RATE);
     }
 
     /**
@@ -382,18 +332,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             channels.closeConnections(-adjustment);
     }
 
-    /**
-     * Switch for enabling download of pending transaction dependencies. A change of value only takes effect for newly
-     * connected peers.
-     */
-    public void setDownloadTxDependencies(boolean downloadTxDependencies) {
-        lock.lock();
-        try {
-            this.downloadTxDependencies = downloadTxDependencies;
-        } finally {
-            lock.unlock();
-        }
-    }
 
     private Runnable triggerConnectionsJob = new Runnable() {
         @Override
@@ -644,11 +582,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         for (PeerDiscovery peerDiscovery : peerDiscoverers) {
             InetSocketAddress[] addresses;
             addresses = peerDiscovery.getPeers(5, TimeUnit.SECONDS);
-            for (InetSocketAddress address : addresses)
-            {
-                if(address != null)
-                    addressSet.add(new PeerAddress(address));
-            }
+            for (InetSocketAddress address : addresses) addressSet.add(new PeerAddress(address));
             if (addressSet.size() > 0) break;
         }
         lock.lock();
@@ -746,14 +680,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     protected void startUp() throws Exception {
         // This is run in a background thread by the Service implementation.
         vPingTimer = new Timer("Peer pinging thread", true);
-        if (torClient != null) {
-            log.info("Starting Tor/Orchid ...");
-            torClient.start();
-            torClient.waitUntilReady(TOR_TIMEOUT_SECONDS * 1000);
-            log.info("Tor ready");
-        }
-        channels.startAsync();
-        channels.awaitRunning();
+        channels.startAndWait();
         triggerConnections();
     }
 
@@ -762,13 +689,9 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         // This is run on a separate thread by the Service implementation.
         vPingTimer.cancel();
         // Blocking close of all sockets.
-        channels.stopAsync();
-        channels.awaitTerminated();
+        channels.stopAndWait();
         for (PeerDiscovery peerDiscovery : peerDiscoverers) {
             peerDiscovery.shutdown();
-        }
-        if (torClient != null) {
-            torClient.stop();
         }
     }
 
@@ -865,54 +788,25 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             if (chain != null && chain.shouldVerifyTransactions())
                 return;
             log.info("Recalculating filter in mode {}", mode);
-            long earliestKeyTimeSecs = Long.MAX_VALUE;
-            int elements = 0;
-            boolean requiresUpdateAll = false;
-            for (PeerFilterProvider p : peerFilterProviders) {
-                earliestKeyTimeSecs = Math.min(earliestKeyTimeSecs, p.getEarliestKeyCreationTime());
-                elements += p.getBloomFilterElementCount();
-                requiresUpdateAll = requiresUpdateAll || p.isRequiringUpdateAllBloomFilter();
-            }
-
-            if (elements > 0) {
-                // We stair-step our element count so that we avoid creating a filter with different parameters
-                // as much as possible as that results in a loss of privacy.
-                // The constant 100 here is somewhat arbitrary, but makes sense for small to medium wallets -
-                // it will likely mean we never need to create a filter with different parameters.
-                lastBloomFilterElementCount = elements > lastBloomFilterElementCount ? elements + 100 : lastBloomFilterElementCount;
-                BloomFilter.BloomUpdate bloomFlags =
-                        requiresUpdateAll ? BloomFilter.BloomUpdate.UPDATE_ALL : BloomFilter.BloomUpdate.UPDATE_P2PUBKEY_ONLY;
-                BloomFilter filter = new BloomFilter(lastBloomFilterElementCount, bloomFilterFPRate, bloomFilterTweak, bloomFlags);
-                for (PeerFilterProvider p : peerFilterProviders)
-                    filter.merge(p.getBloomFilter(lastBloomFilterElementCount, bloomFilterFPRate, bloomFilterTweak));
-
-                boolean changed = !filter.equals(bloomFilter);
-                boolean send = false;
-
-                bloomFilter = filter;
-
+            FilterMerger.Result result = bloomFilterMerger.calculate(ImmutableList.copyOf(peerFilterProviders));
+            boolean send;
                 switch (mode) {
-                    case SEND_IF_CHANGED: send = changed; break;
+                case SEND_IF_CHANGED: send = result.changed; break;
                     case DONT_SEND: send = false; break;
                     case FORCE_SEND: send = true; break;
+                default: throw new UnsupportedOperationException();
                 }
 
                 if (send) {
                     for (Peer peer : peers)
-                        peer.setBloomFilter(filter);
+                    peer.setBloomFilter(result.filter);
                     // Reset the false positive estimate so that we don't send a flood of filter updates
                     // if the estimate temporarily overshoots our threshold.
                     if (chain != null)
                         chain.resetFalsePositiveEstimate();
                 }
-            }
-            // Now adjust the earliest key time backwards by a week to handle the case of clock drift. This can occur
-            // both in block header timestamps and if the users clock was out of sync when the key was first created
-            // (to within a small amount of tolerance).
-            earliestKeyTimeSecs -= 86400 * 7;
-
             // Do this last so that bloomFilter is already set when it gets called.
-            setFastCatchupTimeSecs(earliestKeyTimeSecs);
+            setFastCatchupTimeSecs(result.earliestKeyTimeSecs);
         } finally {
             lock.unlock();
         }
@@ -930,7 +824,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     public void setBloomFilterFalsePositiveRate(double bloomFilterFPRate) {
         lock.lock();
         try {
-            this.bloomFilterFPRate = bloomFilterFPRate;
+            bloomFilterMerger.setBloomFilterFPRate(bloomFilterFPRate);
             recalculateFastCatchupAndFilter(FilterRecalculateMode.SEND_IF_CHANGED);
         } finally {
             lock.unlock();
@@ -966,9 +860,9 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     protected Peer connectTo(PeerAddress address, boolean incrementMaxConnections) {
         VersionMessage ver = getVersionMessage().duplicate();
         ver.bestHeight = chain == null ? 0 : chain.getBestChainHeight();
-        ver.time = Utils.currentTimeSeconds();
+        ver.time = Utils.currentTimeMillis() / 1000;
 
-        Peer peer = new Peer(params, ver, address, chain, memoryPool, downloadTxDependencies);
+        Peer peer = new Peer(params, ver, address, chain, memoryPool);
         peer.addEventListener(startupListener, Threading.SAME_THREAD);
         peer.setMinProtocolVersion(vMinRequiredProtocolVersion);
         pendingPeers.add(peer);
@@ -1061,7 +955,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             // Give the peer a filter that can be used to probabilistically drop transactions that
             // aren't relevant to our wallet. We may still receive some false positives, which is
             // OK because it helps improve wallet privacy. Old nodes will just ignore the message.
-            if (bloomFilter != null) peer.setBloomFilter(bloomFilter);
+            if (bloomFilterMerger.getLastFilter() != null) peer.setBloomFilter(bloomFilterMerger.getLastFilter());
             // Link the peer to the memory pool so broadcast transactions have their confidence levels updated.
             peer.setDownloadData(false);
             // TODO: The peer should calculate the fast catchup time from the added wallets here.
@@ -1174,7 +1068,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
                 if (downloadListener != null)
                     peer.addEventListener(downloadListener, Threading.SAME_THREAD);
                 downloadPeer.setDownloadData(true);
-                downloadPeer.setDownloadParameters(fastCatchupTimeSecs, bloomFilter != null);
+                downloadPeer.setDownloadParameters(fastCatchupTimeSecs, bloomFilterMerger.getLastFilter() != null);
             }
         } finally {
             lock.unlock();
@@ -1202,7 +1096,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             Preconditions.checkState(chain == null || !chain.shouldVerifyTransactions(), "Fast catchup is incompatible with fully verifying");
             fastCatchupTimeSecs = secondsSinceEpoch;
             if (downloadPeer != null) {
-                downloadPeer.setDownloadParameters(secondsSinceEpoch, bloomFilter != null);
+                downloadPeer.setDownloadParameters(secondsSinceEpoch, bloomFilterMerger.getLastFilter() != null);
             }
         } finally {
             lock.unlock();
@@ -1543,7 +1437,13 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         // Sort by ping time.
         Collections.sort(candidates2, new Comparator<PeerAndPing>() {
             public int compare(PeerAndPing peerAndPing, PeerAndPing peerAndPing2) {
-                return Longs.compare(peerAndPing.pingTime, peerAndPing2.pingTime);
+                if (peerAndPing.pingTime < peerAndPing2.pingTime)
+                    return -1;
+                else if (peerAndPing.pingTime == peerAndPing2.pingTime)
+                    return 0;
+                else
+                    return 1;
+
             }
         });
         return candidates2.get(0).peer;
@@ -1559,38 +1459,6 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             return downloadPeer;
         } finally {
             lock.unlock();
-        }
-    }
-
-    public TorClient getTorClient() {
-        return torClient;
-    }
-
-    private static void maybeDisableExportControls() {
-        // This sorry story is documented in https://bugs.openjdk.java.net/browse/JDK-7024850
-        // Oracle received permission to ship AES-256 by default in 2011, but didn't get around to it for Java 8
-        // even though that shipped in 2014! That's dumb. So we disable the ridiculous US government mandated DRM
-        // for AES-256 here, as Tor requires it.
-        if (Tor.isAndroidRuntime())
-            return;
-        try {
-            Field gate = Class.forName("javax.crypto.JceSecurity").getDeclaredField("isRestricted");
-            gate.setAccessible(true);
-            gate.setBoolean(null, false);
-            final Field allPerm = Class.forName("javax.crypto.CryptoAllPermission").getDeclaredField("INSTANCE");
-            allPerm.setAccessible(true);
-            Object accessAllAreasCard = allPerm.get(null);
-            final Constructor<?> constructor = Class.forName("javax.crypto.CryptoPermissions").getDeclaredConstructor();
-            constructor.setAccessible(true);
-            Object coll = constructor.newInstance();
-            Method addPerm = Class.forName("javax.crypto.CryptoPermissions").getDeclaredMethod("add", java.security.Permission.class);
-            addPerm.setAccessible(true);
-            addPerm.invoke(coll, accessAllAreasCard);
-            Field defaultPolicy = Class.forName("javax.crypto.JceSecurity").getDeclaredField("defaultPolicy");
-            defaultPolicy.setAccessible(true);
-            defaultPolicy.set(null, coll);
-        } catch (Exception e) {
-            log.warn("Failed to deactivate AES-256 barrier logic, Tor mode may crash if this JVM requires it: " + e.getMessage());
         }
     }
 }

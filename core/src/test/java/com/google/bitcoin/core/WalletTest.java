@@ -19,17 +19,21 @@ package com.google.bitcoin.core;
 
 import com.google.bitcoin.core.Transaction.SigHash;
 import com.google.bitcoin.core.Wallet.SendRequest;
+import com.google.bitcoin.wallet.DefaultCoinSelector;
+import com.google.bitcoin.wallet.RiskAnalysis;
+import com.google.bitcoin.wallet.WalletTransaction;
+import com.google.bitcoin.wallet.WalletTransaction.Pool;
 import com.google.bitcoin.crypto.KeyCrypter;
 import com.google.bitcoin.crypto.KeyCrypterException;
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.store.WalletProtobufSerializer;
-import com.google.bitcoin.testing.FakeTxBuilder;
-import com.google.bitcoin.testing.MockTransactionBroadcaster;
-import com.google.bitcoin.testing.TestWithWallet;
+import com.google.bitcoin.utils.MockTransactionBroadcaster;
+import com.google.bitcoin.utils.TestUtils;
+import com.google.bitcoin.utils.TestWithWallet;
 import com.google.bitcoin.utils.Threading;
-import com.google.bitcoin.wallet.*;
-import com.google.bitcoin.wallet.WalletTransaction.Pool;
+import com.google.bitcoin.wallet.KeyTimeCoinSelector;
+import com.google.bitcoin.wallet.WalletFiles;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
@@ -51,10 +55,11 @@ import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.google.bitcoin.utils.TestUtils.*;
 import static com.google.bitcoin.core.Utils.*;
-import static com.google.bitcoin.testing.FakeTxBuilder.*;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import static org.junit.Assert.*;
@@ -678,47 +683,24 @@ public class WalletTest extends TestWithWallet {
     }
 
     @Test
-    public void doubleSpends() throws Exception {
+    public void doubleSpendIdenticalTx() throws Exception {
         // Test the case where two semantically identical but bitwise different transactions double spend each other.
-        // We call the second transaction a "mutant" of the first.
-        //
         // This can (and has!) happened when a wallet is cloned between devices, and both devices decide to make the
-        // same spend simultaneously - for example due a re-keying operation. It can also happen if there are malicious
-        // nodes in the P2P network that are mutating transactions on the fly as occurred during Feb 2014.
+        // same spend simultaneously - for example due a re-keying operation.
         final BigInteger value = Utils.toNanoCoins(1, 0);
+        // Give us two outputs.
+        sendMoneyToWallet(value, AbstractBlockChain.NewBlockType.BEST_CHAIN);
+        sendMoneyToWallet(value, AbstractBlockChain.NewBlockType.BEST_CHAIN);
         final BigInteger value2 = Utils.toNanoCoins(2, 0);
-        // Give us three coins and make sure we have some change.
-        sendMoneyToWallet(value.add(value2), AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        final Address address = new ECKey().toAddress(params);
-        Transaction send1 = checkNotNull(wallet.createSend(address, value2));
-        Transaction send2 = checkNotNull(wallet.createSend(address, value2));
-        byte[] buf = send1.bitcoinSerialize();
-        buf[43] = 0;  // Break the signature: bitcoinj won't check in SPV mode and this is easier than other mutations.
-        send1 = new Transaction(params, buf);
+        // The two transactions will have different hashes due to the lack of deterministic signing, but will be
+        // otherwise identical. Once deterministic signatures are implemented, this test will have to be tweaked.
+        Transaction send1 = checkNotNull(wallet.createSend(new ECKey().toAddress(params), value2));
+        Transaction send2 = checkNotNull(wallet.createSend(new ECKey().toAddress(params), value2));
+        send1 = roundTripTransaction(params, send1);
         wallet.commitTx(send2);
-        wallet.allowSpendingUnconfirmedTransactions();
-        assertEquals(value, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
-        // Now spend the change. This transaction should die permanently when the mutant appears in the chain.
-        Transaction send3 = checkNotNull(wallet.createSend(address, value));
-        wallet.commitTx(send3);
         assertEquals(BigInteger.ZERO, wallet.getBalance());
-        final LinkedList<Transaction> dead = new LinkedList<Transaction>();
-        final TransactionConfidence.Listener listener = new TransactionConfidence.Listener() {
-            @Override
-            public void onConfidenceChanged(Transaction tx, ChangeReason reason) {
-                final TransactionConfidence.ConfidenceType type = tx.getConfidence().getConfidenceType();
-                if (reason == ChangeReason.TYPE && type == TransactionConfidence.ConfidenceType.DEAD)
-                    dead.add(tx);
-            }
-        };
-        send2.getConfidence().addEventListener(listener, Threading.SAME_THREAD);
-        send3.getConfidence().addEventListener(listener, Threading.SAME_THREAD);
-        // Double spend!
         sendMoneyToWallet(send1, AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        // Back to having one coin.
-        assertEquals(value, wallet.getBalance());
-        assertEquals(send2, dead.poll());
-        assertEquals(send3, dead.poll());
+        assertEquals(BigInteger.ZERO, wallet.getBalance());
     }
 
     @Test
@@ -772,7 +754,7 @@ public class WalletTest extends TestWithWallet {
                 send1.getConfidence().getConfidenceType());
         assertEquals(send2, received.getOutput(0).getSpentBy().getParentTransaction());
 
-        FakeTxBuilder.DoubleSpends doubleSpends = FakeTxBuilder.createFakeDoubleSpendTxns(params, myAddress);
+        TestUtils.DoubleSpends doubleSpends = TestUtils.createFakeDoubleSpendTxns(params, myAddress);
         // t1 spends to our wallet. t2 double spends somewhere else.
         wallet.receivePending(doubleSpends.t1, null);
         assertEquals(TransactionConfidence.ConfidenceType.PENDING,
@@ -984,7 +966,7 @@ public class WalletTest extends TestWithWallet {
     public void keyCreationTime() throws Exception {
         wallet = new Wallet(params);
         Utils.setMockClock();
-        long now = Utils.currentTimeSeconds();
+        long now = Utils.currentTimeMillis() / 1000;
         // No keys returns current time.
         assertEquals(now, wallet.getEarliestKeyCreationTime());
         Utils.rollMockClock(60);
@@ -999,7 +981,7 @@ public class WalletTest extends TestWithWallet {
     public void scriptCreationTime() throws Exception {
         wallet = new Wallet(params);
         Utils.setMockClock();
-        long now = Utils.currentTimeSeconds();
+        long now = Utils.currentTimeMillis() / 1000;
         // No keys returns current time.
         assertEquals(now, wallet.getEarliestKeyCreationTime());
         Utils.rollMockClock(60);
@@ -1163,7 +1145,7 @@ public class WalletTest extends TestWithWallet {
     @Test
     public void autosaveImmediate() throws Exception {
         // Test that the wallet will save itself automatically when it changes.
-        File f = File.createTempFile(CoinDefinition.coinName.toLowerCase() +"j-unit-test", null);
+        File f = File.createTempFile("bitcoinj-unit-test", null);
         Sha256Hash hash1 = Sha256Hash.hashFileContents(f);
         // Start with zero delay and ensure the wallet file changes after adding a key.
         wallet.autosaveToFile(f, 0, TimeUnit.SECONDS, null);
@@ -1186,7 +1168,7 @@ public class WalletTest extends TestWithWallet {
         // an auto-save cycle of 1 second.
         final File[] results = new File[2];
         final CountDownLatch latch = new CountDownLatch(3);
-        File f = File.createTempFile(CoinDefinition.coinName.toLowerCase() +"j-unit-test", null);
+        File f = File.createTempFile("bitcoinj-unit-test", null);
         Sha256Hash hash1 = Sha256Hash.hashFileContents(f);
         wallet.autosaveToFile(f, 1, TimeUnit.SECONDS,
                 new WalletFiles.Listener() {
@@ -2148,7 +2130,6 @@ public class WalletTest extends TestWithWallet {
         block = new StoredBlock(makeSolvedTestBlock(blockStore, outputKey), BigInteger.ONE, 1);
         tx = createFakeTx(params, CENT, myAddress);
         wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
-        wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
         tx = createFakeTx(params, CENT, myAddress);
         wallet.receivePending(tx, null);
         request = SendRequest.emptyWallet(outputKey);
@@ -2189,6 +2170,7 @@ public class WalletTest extends TestWithWallet {
         Utils.setMockClock();
         // Watch out for wallet-initiated broadcasts.
         MockTransactionBroadcaster broadcaster = new MockTransactionBroadcaster(wallet);
+        wallet.setTransactionBroadcaster(broadcaster);
         wallet.setKeyRotationEnabled(true);
         // Send three cents to two different keys, then add a key and mark the initial keys as compromised.
         ECKey key1 = new ECKey();
@@ -2265,6 +2247,7 @@ public class WalletTest extends TestWithWallet {
         }
 
         MockTransactionBroadcaster broadcaster = new MockTransactionBroadcaster(wallet);
+        wallet.setTransactionBroadcaster(broadcaster);
         wallet.setKeyRotationEnabled(true);
 
         Date compromise = Utils.now();
@@ -2316,5 +2299,39 @@ public class WalletTest extends TestWithWallet {
             }
         }
         assertTrue(TransactionSignature.isEncodingCanonical(dummySig));
+    }
+
+    @Test
+    public void riskAnalysis() throws Exception {
+        // Send a tx that is considered risky to the wallet, verify it doesn't show up in the balances.
+        final Transaction tx = createFakeTx(params, Utils.COIN, myAddress);
+        final AtomicBoolean bool = new AtomicBoolean();
+        wallet.setRiskAnalyzer(new RiskAnalysis.Analyzer() {
+            @Override
+            public RiskAnalysis create(Wallet wallet, Transaction wtx, List<Transaction> dependencies) {
+                RiskAnalysis.Result result = RiskAnalysis.Result.OK;
+                if (wtx.getHash().equals(tx.getHash()))
+                    result = RiskAnalysis.Result.NON_STANDARD;
+                final RiskAnalysis.Result finalResult = result;
+                return new RiskAnalysis() {
+                    @Override
+                    public Result analyze() {
+                        bool.set(true);
+                        return finalResult;
+                    }
+                };
+            }
+        });
+        assertTrue(wallet.isPendingTransactionRelevant(tx));
+        assertEquals(BigInteger.ZERO, wallet.getBalance());
+        assertEquals(BigInteger.ZERO, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
+        wallet.receivePending(tx, null);
+        assertEquals(BigInteger.ZERO, wallet.getBalance());
+        assertEquals(BigInteger.ZERO, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
+        assertTrue(bool.get());
+        // Confirm it in the same manner as how Bloom filtered blocks do. Verify it shows up.
+        StoredBlock block = createFakeBlock(blockStore, tx).storedBlock;
+        wallet.notifyTransactionIsInBlock(tx.getHash(), block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 1);
+        assertEquals(Utils.COIN, wallet.getBalance());
     }
 }

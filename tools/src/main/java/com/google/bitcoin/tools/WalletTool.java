@@ -20,6 +20,7 @@ package com.google.bitcoin.tools;
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.KeyCrypterException;
 import com.google.bitcoin.net.discovery.DnsDiscovery;
+import com.google.bitcoin.net.discovery.PeerDiscovery;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.RegTestParams;
 import com.google.bitcoin.params.TestNet3Params;
@@ -33,7 +34,6 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.Resources;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.subgraph.orchid.TorClient;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -56,7 +56,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 
@@ -77,6 +76,7 @@ public class WalletTool {
     private static PeerGroup peers;
     private static Wallet wallet;
     private static File chainFileName;
+    private static PeerDiscovery discovery;
     private static ValidationMode mode;
     private static String password;
     private static org.bitcoin.protocols.payments.Protos.PaymentRequest paymentRequest;
@@ -209,7 +209,6 @@ public class WalletTool {
         OptionSpec<String> passwordFlag = parser.accepts("password").withRequiredArg();
         OptionSpec<String> paymentRequestLocation = parser.accepts("payment-request").withRequiredArg();
         parser.accepts("no-pki");
-        parser.accepts("tor");
         options = parser.parse(args);
 
         final String HELP_TEXT = Resources.toString(WalletTool.class.getResource("wallet-tool-help.txt"), Charsets.UTF_8);
@@ -454,8 +453,7 @@ public class WalletTool {
             }
 
             setup();
-            peers.startAsync();
-            peers.awaitRunning();
+            peers.startAndWait();
             // Wait for peers to connect, the tx to be sent to one of them and for it to be propagated across the
             // network. Once propagation is complete and we heard the transaction back from all our peers, it will
             // be committed to the wallet.
@@ -478,7 +476,7 @@ public class WalletTool {
     }
 
     private static void sendPaymentRequest(String location, boolean verifyPki) {
-        if (location.startsWith("http") || location.startsWith(CoinDefinition.coinURIScheme)) {
+        if (location.startsWith("http") || location.startsWith("bitcoin")) {
             try {
                 ListenableFuture<PaymentSession> future;
                 if (location.startsWith("http")) {
@@ -498,7 +496,7 @@ public class WalletTool {
                 System.err.println("Error creating payment session " + e.getMessage());
                 System.exit(1);
             } catch (BitcoinURIParseException e) {
-                System.err.println("Invalid "+CoinDefinition.coinName +" uri: " + e.getMessage());
+                System.err.println("Invalid bitcoin uri: " + e.getMessage());
                 System.exit(1);
             } catch (InterruptedException e) {
                 // Ignore.
@@ -539,7 +537,9 @@ public class WalletTool {
             System.out.println("Date: " + session.getDate());
             System.out.println("Memo: " + session.getMemo());
             if (session.pkiVerificationData != null) {
-                System.out.println("Pki-Verified Name: " + session.pkiVerificationData.displayName);
+                System.out.println("Pki-Verified Name: " + session.pkiVerificationData.name);
+                if (session.pkiVerificationData.orgName != null)
+                    System.out.println("Pki-Verified Org: " + session.pkiVerificationData.orgName);
                 System.out.println("PKI data verified by: " + session.pkiVerificationData.rootAuthorityName);
             }
             final Wallet.SendRequest req = session.getSendRequest();
@@ -560,8 +560,7 @@ public class WalletTool {
             ListenableFuture<PaymentSession.Ack> future = session.sendPayment(ImmutableList.of(req.tx), null, null);
             if (future == null) {
                 // No payment_url for submission so, broadcast and wait.
-                peers.startAsync();
-                peers.awaitRunning();
+                peers.startAndWait();
                 peers.broadcastTransaction(req.tx).get();
             } else {
                 PaymentSession.Ack ack = future.get();
@@ -655,8 +654,7 @@ public class WalletTool {
                 break;
 
         }
-        if (!peers.isRunning())
-            peers.startAsync();
+        peers.start();
         try {
             latch.await();
         } catch (InterruptedException e) {
@@ -689,16 +687,7 @@ public class WalletTool {
         }
         // This will ensure the wallet is saved when it changes.
         wallet.autosaveToFile(walletFile, 200, TimeUnit.MILLISECONDS, null);
-        if (options.has("tor")) {
-            try {
-                peers = PeerGroup.newWithTor(params, chain, new TorClient());
-            } catch (TimeoutException e) {
-                System.err.println("Tor startup timed out, falling back to clear net ...");
-            }
-        }
-        if (peers == null) {
             peers = new PeerGroup(params, chain);
-        }
         peers.setUserAgent("WalletTool", "1.0");
         peers.addWallet(wallet);
         if (options.has("peers")) {
@@ -712,24 +701,17 @@ public class WalletTool {
                     System.exit(1);
                 }
             }
-        } else if (!options.has("tor")) {
-            // If Tor mode then PeerGroup already has discovery set up.
-            if (params == RegTestParams.get()) {
-                log.info("Assuming regtest node on localhost");
-                peers.addAddress(PeerAddress.localhost(params));
             } else {
                 peers.addPeerDiscovery(new DnsDiscovery(params));
             }
         }
-    }
 
     private static void syncChain() {
         try {
             setup();
             int startTransactions = wallet.getTransactions(true).size();
             DownloadListener listener = new DownloadListener();
-            peers.startAsync();
-            peers.awaitRunning();
+            peers.startAndWait();
             peers.startBlockChainDownload(listener);
             try {
                 listener.await();
@@ -750,8 +732,7 @@ public class WalletTool {
     private static void shutdown() {
         try {
             if (peers == null) return;  // setup() never called so nothing to do.
-            peers.stopAsync();
-            peers.awaitTerminated();
+            peers.stopAndWait();
             saveWallet(walletFile);
             store.close();
             wallet = null;
@@ -865,7 +846,7 @@ public class WalletTool {
                 Address address = new Address(wallet.getParams(), addr);
                 key = wallet.findKeyFromPubHash(address.getHash160());
             } catch (AddressFormatException e) {
-                System.err.println(addr + " does not parse as a "+CoinDefinition.coinName +" address of the right network parameters.");
+                System.err.println(addr + " does not parse as a Bitcoin address of the right network parameters.");
                 return;
             }
         }

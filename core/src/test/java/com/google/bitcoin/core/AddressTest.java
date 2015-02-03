@@ -32,12 +32,11 @@ public class AddressTest {
 
     @Test
     public void stringification() throws Exception {
-        if(CoinDefinition.supportsTestNet) {
         // Test a testnet address.
             Address a = new Address(testParams, Hex.decode("fda79a24e50ff70ff42f7d89585da5bd19d9e5cc"));
             assertEquals("n4eA2nbYqErp7H6jebchxAN59DmNpksexv", a.toString());
             assertFalse(a.isP2SHAddress());
-        }
+
         Address b = new Address(mainParams, Hex.decode("4a22c3c4cbb31e4d03b15550636762bda0baf85a"));
         assertEquals(CoinDefinition.UNITTEST_ADDRESS, b.toString());
         assertFalse(b.isP2SHAddress());
@@ -45,11 +44,8 @@ public class AddressTest {
     
     @Test
     public void decoding() throws Exception {
-        if(CoinDefinition.supportsTestNet)
-        {
             Address a = new Address(testParams, "n4eA2nbYqErp7H6jebchxAN59DmNpksexv");
             assertEquals("fda79a24e50ff70ff42f7d89585da5bd19d9e5cc", Utils.bytesToHexString(a.getHash160()));
-        }
 
         Address b = new Address(mainParams, CoinDefinition.UNITTEST_ADDRESS);
         assertEquals("4a22c3c4cbb31e4d03b15550636762bda0baf85a", Utils.bytesToHexString(b.getHash160()));
@@ -94,11 +90,8 @@ public class AddressTest {
     public void getNetwork() throws Exception {
         NetworkParameters params = Address.getParametersFromAddress(CoinDefinition.UNITTEST_ADDRESS);
         assertEquals(MainNetParams.get().getId(), params.getId());
-        if(CoinDefinition.supportsTestNet)
-        {
             params = Address.getParametersFromAddress("n4eA2nbYqErp7H6jebchxAN59DmNpksexv");
             assertEquals(TestNet3Params.get().getId(), params.getId());
-        }
     }
     
     @Test

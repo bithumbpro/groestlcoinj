@@ -20,7 +20,6 @@ package com.google.bitcoin.core;
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.MemoryBlockStore;
-import com.google.bitcoin.testing.InboundMessageQueuer;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -119,8 +118,7 @@ public class FilteredBlockAndPartialMerkleTreeTests extends TestWithPeerGroup {
         peerGroup.addWallet(wallet);
         blockChain.addWallet(wallet);
 
-        peerGroup.startAsync();
-        peerGroup.awaitRunning();
+        peerGroup.startAndWait();
 
         // Create a peer.
         InboundMessageQueuer p1 = connectPeer(1);
@@ -162,7 +160,7 @@ public class FilteredBlockAndPartialMerkleTreeTests extends TestWithPeerGroup {
 
         // Peer 1 goes away.
         closePeer(peerOf(p1));
-        peerGroup.stopAsync();
+        peerGroup.stop();
         super.tearDown();
     }
 }

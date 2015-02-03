@@ -44,6 +44,6 @@ public class WatchMempool {
                 }
             }
         });
-        peerGroup.startAsync();
+        peerGroup.start();
     }
 }

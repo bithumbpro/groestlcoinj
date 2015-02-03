@@ -23,9 +23,8 @@ import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.store.SPVBlockStore;
 import com.google.bitcoin.store.WalletProtobufSerializer;
 import com.google.common.util.concurrent.AbstractIdleService;
-import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.Service;
-import com.subgraph.orchid.TorClient;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -34,7 +33,6 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -78,7 +76,6 @@ public class WalletAppKit extends AbstractIdleService {
     protected boolean autoStop = true;
     protected InputStream checkpoints;
     protected boolean blockingStartup = true;
-    protected boolean useTor = false;   // Perhaps in future we can change this to true.
     protected String userAgent, version;
 
     public WalletAppKit(NetworkParameters params, File directory, String filePrefix) {
@@ -159,15 +156,6 @@ public class WalletAppKit extends AbstractIdleService {
     }
 
     /**
-     * If called, then an embedded Tor client library will be used to connect to the P2P network. The user does not need
-     * any additional software for this: it's all pure Java. As of April 2014 <b>this mode is experimental</b>.
-     */
-    public WalletAppKit useTor() {
-        this.useTor = true;
-        return this;
-    }
-
-    /**
      * <p>Override this to load all wallet extensions if any are necessary.</p>
      *
      * <p>When this is called, chain(), store(), and peerGroup() will return the created objects, however they are not
@@ -189,7 +177,6 @@ public class WalletAppKit extends AbstractIdleService {
                 throw new IOException("Could not create named directory.");
             }
         }
-        FileInputStream walletStream = null;
         try {
             File chainFile = new File(directory, filePrefix + ".spvchain");
             boolean chainFileExists = chainFile.exists();
@@ -216,12 +203,16 @@ public class WalletAppKit extends AbstractIdleService {
             if (this.userAgent != null)
                 vPeerGroup.setUserAgent(userAgent, version);
             if (vWalletFile.exists()) {
-                walletStream = new FileInputStream(vWalletFile);
+                FileInputStream walletStream = new FileInputStream(vWalletFile);
+                try {
                 vWallet = new Wallet(params);
                 addWalletExtensions(); // All extensions must be present before we deserialize
                 new WalletProtobufSerializer().readWallet(WalletProtobufSerializer.parseToProto(walletStream), vWallet);
                 if (shouldReplayWallet)
                     vWallet.clearTransactions(0);
+                } finally {
+                    walletStream.close();
+                }
             } else {
                 vWallet = new Wallet(params);
                 vWallet.addKey(new ECKey());
@@ -244,8 +235,7 @@ public class WalletAppKit extends AbstractIdleService {
             onSetupCompleted();
 
             if (blockingStartup) {
-                vPeerGroup.startAsync();
-                vPeerGroup.awaitRunning();
+                vPeerGroup.startAndWait();
                 // Make sure we shut down cleanly.
                 installShutdownHook();
 
@@ -254,32 +244,25 @@ public class WalletAppKit extends AbstractIdleService {
                 vPeerGroup.startBlockChainDownload(listener);
                 listener.await();
             } else {
-                vPeerGroup.startAsync();
-                vPeerGroup.addListener(new Service.Listener() {
+                Futures.addCallback(vPeerGroup.start(), new FutureCallback<State>() {
                     @Override
-                    public void running() {
+                    public void onSuccess(State result) {
                         final PeerEventListener l = downloadListener == null ? new DownloadListener() : downloadListener;
                         vPeerGroup.startBlockChainDownload(l);
                     }
 
                     @Override
-                    public void failed(State from, Throwable failure) {
-                        throw new RuntimeException(failure);
+                    public void onFailure(Throwable t) {
+                        throw new RuntimeException(t);
                     }
-                }, MoreExecutors.sameThreadExecutor());
+                });
             }
         } catch (BlockStoreException e) {
             throw new IOException(e);
-        } finally {
-            if (walletStream != null) walletStream.close();
         }
     }
 
-    protected PeerGroup createPeerGroup() throws TimeoutException {
-        if (useTor) {
-            return PeerGroup.newWithTor(params, vChain, new TorClient());
-        }
-        else
+    protected PeerGroup createPeerGroup() {
             return new PeerGroup(params, vChain);
     }
 
@@ -287,8 +270,7 @@ public class WalletAppKit extends AbstractIdleService {
         if (autoStop) Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override public void run() {
                 try {
-                    WalletAppKit.this.stopAsync();
-                    WalletAppKit.this.awaitTerminated();
+                    WalletAppKit.this.stopAndWait();
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -300,8 +282,7 @@ public class WalletAppKit extends AbstractIdleService {
     protected void shutDown() throws Exception {
         // Runs in a separate thread.
         try {
-            vPeerGroup.stopAsync();
-            vPeerGroup.awaitTerminated();
+            vPeerGroup.stopAndWait();
             vWallet.saveToFile(vWalletFile);
             vStore.close();
 
