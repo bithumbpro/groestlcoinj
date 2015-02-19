@@ -16,10 +16,8 @@
 
 package com.google.bitcoin.params;
 
-import com.google.bitcoin.core.NetworkParameters;
-import com.google.bitcoin.core.Sha256Hash;
-import com.google.bitcoin.core.Utils;
 import com.google.bitcoin.core.CoinDefinition;
+import com.google.bitcoin.core.NetworkParameters;
 
 import static com.google.common.base.Preconditions.checkState;
 
@@ -32,7 +30,7 @@ public class MainNetParams extends NetworkParameters {
         interval = INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
         proofOfWorkLimit = CoinDefinition.proofOfWorkLimit;
-        dumpedPrivateKeyHeader = 128 + CoinDefinition.AddressHeader;
+        dumpedPrivateKeyHeader = 128;
         addressHeader = CoinDefinition.AddressHeader;
         p2shHeader = CoinDefinition.p2shHeader;
         acceptableAddressCodes = new int[] { addressHeader, p2shHeader};
