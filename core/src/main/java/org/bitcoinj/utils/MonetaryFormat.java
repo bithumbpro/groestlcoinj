@@ -327,25 +327,32 @@ public final class MonetaryFormat {
      * Format the given monetary value to a human readable form.
      */
     public CharSequence format(Monetary monetary) {
+        return format(monetary, monetary.smallestUnitExponent());
+    }
+
+    /**
+     * Format the given monetary value to a human readable form.
+     */
+    public CharSequence format(Monetary monetary, int smallestUnitExponent) {
         // preparation
         int maxDecimals = minDecimals;
         if (decimalGroups != null)
             for (int group : decimalGroups)
                 maxDecimals += group;
-        checkState(maxDecimals <= monetary.smallestUnitExponent());
+        checkState(maxDecimals <= smallestUnitExponent);
 
         // rounding
         long satoshis = Math.abs(monetary.getValue());
-        long precisionDivisor = checkedPow(10, monetary.smallestUnitExponent() - shift - maxDecimals);
+        long precisionDivisor = checkedPow(10, smallestUnitExponent - shift - maxDecimals);
         satoshis = checkedMultiply(divide(satoshis, precisionDivisor, roundingMode), precisionDivisor);
 
         // shifting
-        long shiftDivisor = checkedPow(10, monetary.smallestUnitExponent() - shift);
+        long shiftDivisor = checkedPow(10, smallestUnitExponent - shift);
         long numbers = satoshis / shiftDivisor;
         long decimals = satoshis % shiftDivisor;
 
         // formatting
-        String decimalsStr = String.format(Locale.US, "%0" + (monetary.smallestUnitExponent() - shift) + "d", decimals);
+        String decimalsStr = String.format(Locale.US, "%0" + (smallestUnitExponent - shift) + "d", decimals);
         StringBuilder str = new StringBuilder(decimalsStr);
         while (str.length() > minDecimals && str.charAt(str.length() - 1) == '0')
             str.setLength(str.length() - 1); // trim trailing zero
@@ -391,12 +398,22 @@ public final class MonetaryFormat {
 
     /**
      * Parse a human readable coin value to a {@link org.bitcoinj.core.Coin} instance.
-     * 
+     *
      * @throws NumberFormatException
      *             if the string cannot be parsed for some reason
      */
     public Coin parse(String str) throws NumberFormatException {
-        return Coin.valueOf(parseValue(str, Coin.SMALLEST_UNIT_EXPONENT));
+        return parse(str, Coin.SMALLEST_UNIT_EXPONENT);
+    }
+
+    /**
+     * Parse a human readable coin value to a {@link org.bitcoinj.core.Coin} instance.
+     *
+     * @throws NumberFormatException
+     *             if the string cannot be parsed for some reason
+     */
+    public Coin parse(String str, int smallestUnitExponent) throws NumberFormatException {
+        return Coin.valueOf(parseValue(str, smallestUnitExponent));
     }
 
     /**

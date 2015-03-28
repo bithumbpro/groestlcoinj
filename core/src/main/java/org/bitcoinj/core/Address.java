@@ -42,7 +42,7 @@ public class Address extends VersionedChecksummedBytes {
      */
     public static final int LENGTH = 20;
 
-    transient final NetworkParameters params;
+    final NetworkParameters params;
 
     /**
      * Construct an address from parameters, the address version, and the hash160 form. Example:<p>

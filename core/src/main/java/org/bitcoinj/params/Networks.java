@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 
 import java.util.Collection;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Utility class that holds all the registered NetworkParameters types used for Address auto discovery.
@@ -30,6 +31,23 @@ import java.util.Set;
  * version/type code.
  */
 public class Networks {
+    public enum Family {
+        BITCOIN,
+        RUBYCOIN,
+        CANNACOIN,
+        BLACKCOIN,
+        REDDCOIN,
+        PEERCOIN,
+        NUBITS
+    }
+
+    private static final Pattern cannacoinFamily = Pattern.compile(".*(cannacoin).*");
+    private static final Pattern rubycoinFamily = Pattern.compile(".*(rubycoin).*");
+    private static final Pattern blackcoinFamily = Pattern.compile(".*(blackcoin).*");
+    private static final Pattern reddcoinFamily = Pattern.compile(".*(reddcoin).*");
+    private static final Pattern peercoinFamily = Pattern.compile(".*(peercoin).*");
+    private static final Pattern nubitsFamily = Pattern.compile(".*(nubits|nushares).*");
+
     /** Registered networks */
     private static Set<NetworkParameters> networks = ImmutableSet.of(TestNet3Params.get(), MainNetParams.get());
 
@@ -57,6 +75,57 @@ public class Networks {
                 builder.add(parameters);
             }
             networks = builder.build();
+        }
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family) {
+        return getFamily(network) == family;
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family1, Family family2) {
+        Family networkFamily = getFamily(network);
+        return networkFamily == family1 || networkFamily == family2;
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family1, Family family2, Family family3) {
+        Family networkFamily = getFamily(network);
+        return networkFamily == family1 || networkFamily == family2 || networkFamily == family3;
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family1, Family family2, Family family3, Family family4) {
+        Family networkFamily = getFamily(network);
+        return networkFamily == family1 || networkFamily == family2 || networkFamily == family3 || networkFamily == family4;
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family1, Family family2, Family family3, Family family4, Family family5) {
+        Family networkFamily = getFamily(network);
+        return networkFamily == family1 || networkFamily == family2 || networkFamily == family3 || networkFamily == family4 || networkFamily == family5;
+    }
+
+    public static boolean isFamily(NetworkParameters network, Family family1, Family family2, Family family3, Family family4, Family family5, Family family6) {
+        Family networkFamily = getFamily(network);
+        return networkFamily == family1 || networkFamily == family2 || networkFamily == family3 || networkFamily == family4 || networkFamily == family5 || networkFamily == family6;
+    }
+
+    public static Family getFamily(NetworkParameters network) {
+        if (network == null || network.getId() == null) {
+            return Family.BITCOIN; // default is Bitcoin
+        }
+
+        if (rubycoinFamily.matcher(network.getId()).matches()) {
+            return Family.RUBYCOIN;
+        } else if (cannacoinFamily.matcher(network.getId()).matches()) {
+            return Family.CANNACOIN;
+        } else if (blackcoinFamily.matcher(network.getId()).matches()) {
+            return Family.BLACKCOIN;
+        } else if (reddcoinFamily.matcher(network.getId()).matches()) {
+            return Family.REDDCOIN;
+        } else if (peercoinFamily.matcher(network.getId()).matches()) {
+            return Family.PEERCOIN;
+        } else if (nubitsFamily.matcher(network.getId()).matches()) {
+            return Family.NUBITS;
+        } else {
+            return Family.BITCOIN; // everything else is Bitcoin
         }
     }
 }

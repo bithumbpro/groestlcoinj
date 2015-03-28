@@ -77,6 +77,8 @@ public abstract class NetworkParameters implements Serializable {
     protected int interval;
     protected int targetTimespan;
     protected byte[] alertSigningKey;
+    protected int transactionVersion = 1;
+    protected byte tokenId;
 
     /**
      * See getId(). This may be null for old deserialized wallets. In that case we derive it heuristically
@@ -142,6 +144,7 @@ public abstract class NetworkParameters implements Serializable {
      * The maximum number of coins to be generated
      */
     public static final long MAX_COINS = CoinDefinition.MAX_COINS;
+
 
     /**
      * The maximum money to be generated
@@ -352,5 +355,20 @@ public abstract class NetworkParameters implements Serializable {
      */
     public byte[] getAlertSigningKey() {
         return alertSigningKey;
+    }
+
+    /**
+     * The transaction version. Currently Bitcoin only supports version 1 and any other values will be rejected by the
+     * network.
+     */
+    public int getTransactionVersion() {
+        return transactionVersion;
+    }
+
+    /**
+     * Used for various blockchain assets
+     */
+    public byte getTokenId() {
+        return tokenId;
     }
 }

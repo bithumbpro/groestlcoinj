@@ -3,8 +3,8 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.bitcoinj</groupId>
-  <artifactId>groestlcoinj-parent</artifactId>
-  <version>0.12.2</version>
+  <artifactId>bitcoinj-parent</artifactId>
+  <version>0.12.2-COINOMI-3</version>
   <packaging>pom</packaging>
 
   <modules>

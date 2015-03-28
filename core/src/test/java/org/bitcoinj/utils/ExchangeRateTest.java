@@ -18,6 +18,7 @@ package org.bitcoinj.utils;
 
 import static org.junit.Assert.assertEquals;
 
+import org.bitcoinj.core.NetworkParameters;
 import org.junit.Test;
 
 import org.bitcoinj.core.Coin;
@@ -54,13 +55,13 @@ public class ExchangeRateTest {
     @Test(expected = ArithmeticException.class)
     public void fiatToCoinTooLarge() throws Exception {
         ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1"));
-        rate.fiatToCoin(Fiat.parseFiat("XXX", "21000001"));
+        rate.fiatToCoin(Fiat.parseFiat("XXX", String.valueOf(NetworkParameters.MAX_COINS + 1)));
     }
 
     @Test(expected = ArithmeticException.class)
     public void fiatToCoinTooSmall() throws Exception {
         ExchangeRate rate = new ExchangeRate(Fiat.parseFiat("XXX", "1"));
-        rate.fiatToCoin(Fiat.parseFiat("XXX", "-21000001"));
+        rate.fiatToCoin(Fiat.parseFiat("XXX", String.valueOf(-1 * (NetworkParameters.MAX_COINS + 1))));
     }
 
     @Test(expected = ArithmeticException.class)
