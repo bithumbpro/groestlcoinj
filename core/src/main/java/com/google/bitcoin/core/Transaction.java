@@ -214,7 +214,7 @@ public class Transaction extends ChildMessage implements Serializable {
     public Sha256Hash getHash() {
         if (hash == null) {
             byte[] bits = bitcoinSerialize();
-            hash = new Sha256Hash(reverseBytes(doubleDigest(bits)));
+            hash = new Sha256Hash(reverseBytes(singleDigest(bits, 0, bits.length)/*doubleDigest(bits)*/));
         }
         return hash;
     }
@@ -680,7 +680,7 @@ public class Transaction extends ChildMessage implements Serializable {
                 s.append(scriptPubKey);
                 s.append(" ");
                 s.append(bitcoinValueToFriendlyString(out.getValue()));
-                s.append(" BTC");
+                s.append(" "+ CoinDefinition.coinTicker);
                 if (!out.isAvailableForSpending()) {
                     s.append(" Spent");
                 }
@@ -1113,7 +1113,9 @@ public class Transaction extends ChildMessage implements Serializable {
             uint32ToByteStreamLE(0x000000ff & sigHashType, bos);
             // Note that this is NOT reversed to ensure it will be signed correctly. If it were to be printed out
             // however then we would expect that it is IS reversed.
-            Sha256Hash hash = new Sha256Hash(doubleDigest(bos.toByteArray()));
+            //Sha256Hash hash = new Sha256Hash(doubleDigest(bos.toByteArray()));
+            byte [] bytes = bos.toByteArray();
+            Sha256Hash hash = new Sha256Hash(singleDigest(bytes, 0, bytes.length));
             bos.close();
 
             // Put the transaction back to how we found it.

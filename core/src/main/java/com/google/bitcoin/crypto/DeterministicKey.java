@@ -18,6 +18,7 @@ package com.google.bitcoin.crypto;
 import com.google.bitcoin.core.*;
 import com.google.common.collect.ImmutableList;
 import org.spongycastle.crypto.params.KeyParameter;
+import com.hashengineering.crypto.Groestl;
 import org.spongycastle.math.ec.ECPoint;
 import org.spongycastle.util.encoders.Hex;
 
@@ -166,7 +167,7 @@ public class DeterministicKey extends ECKey {
         int inputLength = input.length;
         byte[] checksummed = new byte[inputLength + 4];
         System.arraycopy(input, 0, checksummed, 0, inputLength);
-        byte[] checksum = Utils.doubleDigest(input);
+        byte[] checksum = Groestl.digest(input);//Utils.doubleDigest(input);
         System.arraycopy(checksum, 0, checksummed, inputLength, 4);
         return checksummed;
     }
