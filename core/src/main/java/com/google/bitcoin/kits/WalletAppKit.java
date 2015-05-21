@@ -262,8 +262,9 @@ public class WalletAppKit extends AbstractIdleService {
             onSetupCompleted();
 
             if (blockingStartup) {
-                vPeerGroup.startAsync();
-                vPeerGroup.awaitRunning();
+                //vPeerGroup.startAsync();
+                //vPeerGroup.awaitRunning();
+                vPeerGroup.startAndWait();
                 // Make sure we shut down cleanly.
                 installShutdownHook();
 

@@ -143,8 +143,9 @@ public class PaymentChannelServerListener {
                 return new ServerHandler(new InetSocketAddress(inetAddress, port), timeoutSeconds).socketProtobufHandler;
             }
         }, new InetSocketAddress(port));
-        server.startAsync();
-        server.awaitRunning();
+        //server.startAsync();
+        //server.awaitRunning();
+        server.startAndWait();
     }
 
     /**

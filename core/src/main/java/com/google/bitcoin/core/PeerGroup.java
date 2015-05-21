@@ -751,8 +751,8 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             torClient.waitUntilReady(TOR_TIMEOUT_SECONDS * 1000);
             log.info("Tor ready");
         }
-        channels.startAsync();
-        channels.awaitRunning();
+        channels.startAndWait();
+        //channels.awaitRunning();
         triggerConnections();
     }
 

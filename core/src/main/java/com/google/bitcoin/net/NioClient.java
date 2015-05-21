@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
-import static com.google.common.base.Preconditions.checkState;
-
 /**
  * Creates a simple connection to a server using a {@link StreamParser} to process data.
  */
@@ -91,8 +89,9 @@ public class NioClient implements MessageWriteTarget {
      */
     public NioClient(final SocketAddress serverAddress, final StreamParser parser,
                      final int connectTimeoutMillis) throws IOException {
-        manager.startAsync();
-        manager.awaitRunning();
+        //manager.startAsync();
+        //manager.awaitRunning();
+        manager.startAndWait();
         handler = new Handler(parser, connectTimeoutMillis);
         manager.openConnection(serverAddress, handler);
     }

@@ -25,9 +25,9 @@
         <version>0.12-SNAPSHOT</version>
     </parent>
 
-    <artifactId>bitcoinj</artifactId>
+    <artifactId>groestlcoinj</artifactId>
 
-    <name>bitcoinj</name>
+    <name>groestlcoinj</name>
     <description>A Java Bitcoin library</description>
 
     <packaging>jar</packaging>

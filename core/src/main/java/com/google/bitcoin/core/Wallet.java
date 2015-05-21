@@ -3968,4 +3968,56 @@ public class Wallet extends BaseTaggableObject implements Serializable, BlockCha
         super.setTag(tag, value);
         saveNow();
     }
+
+    public boolean removeWatchedAddress(Address address)
+    {
+        return removeWatchedAddresses(Lists.newArrayList(new Address[] { address })) == 1;
+    }
+
+    public int removeWatchedAddresses(List<Address> addresses)
+    {
+        List<Script> scripts = Lists.newArrayList();
+        for (Address address : addresses)
+        {
+            Script script = ScriptBuilder.createOutputScript(address);
+            scripts.add(script);
+        }
+        return removeWatchedScripts(scripts);
+    }
+
+    public int removeWatchedScripts(List<Script> scripts)
+    {
+        this.lock.lock();
+        try
+        {
+            int removed = 0;
+            Script script;
+            Iterator iterator;
+
+            Set<Script> tempWatchedScript = this.watchedScripts;
+            for (Iterator i = scripts.iterator(); i.hasNext();)
+            {
+                script = (Script)i.next();
+                for (iterator = tempWatchedScript.iterator(); iterator.hasNext();)
+                {
+                    Script watchedScript = (Script)iterator.next();
+                    if (Arrays.equals(script.getPubKeyHash(), watchedScript.getPubKeyHash()))
+                    {
+                        this.watchedScripts.remove(watchedScript);
+                        removed++;
+                    }
+                }
+            }
+
+            queueOnScriptsAdded(scripts);
+            saveNow();
+            return removed;
+        }
+        finally
+        {
+            this.lock.unlock();
+        }
+    }
+
+
 }

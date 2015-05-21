@@ -724,7 +724,7 @@ public class ECKey implements EncryptableItem, Serializable {
         if (priv == null)
             throw new MissingPrivateKeyException();
         byte[] data = Utils.formatMessageForSigning(message);
-        Sha256Hash hash = Sha256Hash.createDouble(data);
+        Sha256Hash hash = Sha256Hash.createSingle(data);
         ECDSASignature sig = sign(hash, aesKey);
         // Now we have to work backwards to figure out the recId needed to recover the signature.
         int recId = -1;
@@ -778,7 +778,7 @@ public class ECKey implements EncryptableItem, Serializable {
         byte[] messageBytes = Utils.formatMessageForSigning(message);
         // Note that the C++ code doesn't actually seem to specify any character encoding. Presumably it's whatever
         // JSON-SPIRIT hands back. Assume UTF-8 for now.
-        Sha256Hash messageHash = Sha256Hash.createDouble(messageBytes);
+        Sha256Hash messageHash = Sha256Hash.createSingle(messageBytes);
         boolean compressed = false;
         if (header >= 31) {
             compressed = true;
