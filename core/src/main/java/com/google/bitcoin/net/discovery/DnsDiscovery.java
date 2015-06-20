@@ -41,7 +41,7 @@ import java.util.concurrent.*;
 public class DnsDiscovery implements PeerDiscovery {
     private static final Logger log = LoggerFactory.getLogger(DnsDiscovery.class);
 
-    private final String[] dnsSeeds;
+    private final String[] hostNames;
     private final NetworkParameters netParams;
 
     /**
@@ -59,41 +59,39 @@ public class DnsDiscovery implements PeerDiscovery {
      * @param dnsSeeds Host names to be examined for seed addresses.
      * @param netParams Network parameters to be used for port information.
      */
-    public DnsDiscovery(String[] dnsSeeds, NetworkParameters netParams) {
-        this.dnsSeeds = dnsSeeds;
+    public DnsDiscovery(String[] hostNames, NetworkParameters netParams) {
+        this.hostNames = hostNames;
         this.netParams = netParams;
     }
 
     public InetSocketAddress[] getPeers(long timeoutValue, TimeUnit timeoutUnit) throws PeerDiscoveryException {
-        if (dnsSeeds == null || dnsSeeds.length == 0)
-            throw new PeerDiscoveryException("No DNS seeds configured; unable to find any peers");
+        if (hostNames == null)
+            throw new PeerDiscoveryException("Unable to find any peers via DNS");
 
         // Java doesn't have an async DNS API so we have to do all lookups in a thread pool, as sometimes seeds go
         // hard down and it takes ages to give up and move on.
-        ExecutorService threadPool = Executors.newFixedThreadPool(dnsSeeds.length);
+        ExecutorService threadPool = Executors.newFixedThreadPool(hostNames.length);
         try {
             List<Callable<InetAddress[]>> tasks = Lists.newArrayList();
-            for (final String seed : dnsSeeds) {
+            for (final String seed : hostNames)
                 tasks.add(new Callable<InetAddress[]>() {
                     public InetAddress[] call() throws Exception {
                         return InetAddress.getAllByName(seed);
                     }
                 });
-            }
             final List<Future<InetAddress[]>> futures = threadPool.invokeAll(tasks, timeoutValue, timeoutUnit);
             ArrayList<InetSocketAddress> addrs = Lists.newArrayList();
             for (int i = 0; i < futures.size(); i++) {
                 Future<InetAddress[]> future = futures.get(i);
                 if (future.isCancelled()) {
-                    log.warn("DNS seed {}: timed out", dnsSeeds[i]);
+                    log.warn("{} timed out", hostNames[i]);
                     continue;  // Timed out.
                 }
                 final InetAddress[] inetAddresses;
                 try {
                     inetAddresses = future.get();
-                    log.info("DNS seed {}: got {} peers", dnsSeeds[i], inetAddresses.length);
                 } catch (ExecutionException e) {
-                    log.error("DNS seed {}: failed to look up: {}", dnsSeeds[i], e.getMessage());
+                    log.error("Failed to look up DNS seeds from {}: {}", hostNames[i], e.getMessage());
                     continue;
                 }
                 for (InetAddress addr : inetAddresses) {

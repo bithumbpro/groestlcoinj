@@ -82,13 +82,10 @@ public class StoredBlock implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        StoredBlock other = (StoredBlock) o;
-        return header.equals(other.header) &&
-               chainWork.equals(other.chainWork) &&
-               height == other.height;
+    public boolean equals(Object other) {
+        if (!(other instanceof StoredBlock)) return false;
+        StoredBlock o = (StoredBlock) other;
+        return o.header.equals(header) && o.chainWork.equals(chainWork) && o.height == height;
     }
 
     @Override

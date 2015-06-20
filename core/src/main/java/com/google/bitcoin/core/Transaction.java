@@ -22,8 +22,6 @@ import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.script.ScriptOpCodes;
-import com.google.bitcoin.wallet.DecryptingKeyBag;
-import com.google.bitcoin.wallet.KeyBag;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -214,7 +212,7 @@ public class Transaction extends ChildMessage implements Serializable {
     public Sha256Hash getHash() {
         if (hash == null) {
             byte[] bits = bitcoinSerialize();
-            hash = new Sha256Hash(reverseBytes(singleDigest(bits, 0, bits.length)/*doubleDigest(bits)*/));
+            hash = new Sha256Hash(reverseBytes(singleDigest(bits, 0, bits.length)));
         }
         return hash;
     }
@@ -375,25 +373,6 @@ public class Transaction extends ChildMessage implements Serializable {
      */
     public BigInteger getValue(Wallet wallet) throws ScriptException {
         return getValueSentToMe(wallet).subtract(getValueSentFromMe(wallet));
-    }
-
-    /**
-     * The transaction fee is the difference of the value of all inputs and the value of all outputs. Currently, the fee
-     * can only be determined for transactions created by us.
-     * 
-     * @return fee, or null if it cannot be determined
-     */
-    public BigInteger getFee() {
-        BigInteger fee = BigInteger.ZERO;
-        for (TransactionInput input : inputs) {
-            if (input.getValue() == null)
-                return null;
-            fee = fee.add(input.getValue());
-        }
-        for (TransactionOutput output : outputs) {
-            fee = fee.subtract(output.getValue());
-        }
-        return fee;
     }
 
     boolean disconnectInputs() {
@@ -656,17 +635,8 @@ public class Transaction extends ChildMessage implements Serializable {
             try {
                 Script scriptSig = in.getScriptSig();
                 s.append(scriptSig);
-                if (in.getValue() != null)
-                    s.append(" ").append(bitcoinValueToFriendlyString(in.getValue())).append(" BTC");
-                s.append("\n          ");
-                s.append("outpoint:");
-                final TransactionOutPoint outpoint = in.getOutpoint();
-                s.append(outpoint.toString());
-                final TransactionOutput connectedOutput = outpoint.getConnectedOutput();
-                if (connectedOutput != null) {
-                    s.append(" hash160:");
-                    s.append(Utils.bytesToHexString(connectedOutput.getScriptPubKey().getPubKeyHash()));
-                }
+                s.append(" / ");
+                s.append(in.getOutpoint().toString());
             } catch (Exception e) {
                 s.append("[exception: ").append(e.getMessage()).append("]");
             }
@@ -764,22 +734,6 @@ public class Transaction extends ChildMessage implements Serializable {
     }
 
     /**
-     * Adds an input that points to the given output and contains a valid signature for it, calculated using the
-     * signing key.
-     */
-    public TransactionInput addSignedInput(TransactionOutput output, ECKey signingKey) {
-        return addSignedInput(output.getOutPointFor(), output.getScriptPubKey(), signingKey);
-    }
-
-    /**
-     * Adds an input that points to the given output and contains a valid signature for it, calculated using the
-     * signing key.
-     */
-    public TransactionInput addSignedInput(TransactionOutput output, ECKey signingKey, SigHash sigHash, boolean anyoneCanPay) {
-        return addSignedInput(output.getOutPointFor(), output.getScriptPubKey(), signingKey, sigHash, anyoneCanPay);
-    }
-
-    /**
      * Removes all the inputs from this transaction.
      * Note that this also invalidates the length attribute
      */
@@ -850,22 +804,7 @@ public class Transaction extends ChildMessage implements Serializable {
      * @param wallet  A wallet is required to fetch the keys needed for signing.
      * @param aesKey The AES key to use to decrypt the key before signing. Null if no decryption is required.
      */
-    public void signInputs(SigHash hashType, Wallet wallet, @Nullable KeyParameter aesKey) throws ScriptException {
-        if (aesKey == null) {
-            signInputs(hashType, false, wallet);
-        } else {
-            signInputs(hashType, false, new DecryptingKeyBag(wallet, aesKey));
-        }
-    }
-
-    /**
-     * Signs as many inputs as possible using keys from the given key bag, which are expected to be usable for
-     * signing, i.e. not encrypted and not missing the private key part.
-     *
-     * @param hashType This should always be set to SigHash.ALL currently. Other types are unused.
-     * @param keyBag a provider of keys that are usable as-is for signing.
-     */
-    public synchronized void signInputs(SigHash hashType, boolean anyoneCanPay, KeyBag keyBag) throws ScriptException {
+    public synchronized void signInputs(SigHash hashType, Wallet wallet, @Nullable KeyParameter aesKey) throws ScriptException {
         checkState(inputs.size() > 0);
         checkState(outputs.size() > 0);
 
@@ -901,23 +840,21 @@ public class Transaction extends ChildMessage implements Serializable {
             if (input.getScriptBytes().length != 0)
                 log.warn("Re-signing an already signed transaction! Be sure this is what you want.");
             // Find the signing key we'll need to use.
-            ECKey key = input.getOutpoint().getConnectedKey(keyBag);
+            ECKey key = input.getOutpoint().getConnectedKey(wallet);
             // This assert should never fire. If it does, it means the wallet is inconsistent.
             checkNotNull(key, "Transaction exists in wallet that we cannot redeem: %s", input.getOutpoint().getHash());
             // Keep the key around for the script creation step below.
             signingKeys[i] = key;
             // The anyoneCanPay feature isn't used at the moment.
+            boolean anyoneCanPay = false;
             byte[] connectedPubKeyScript = input.getOutpoint().getConnectedPubKeyScript();
-            try {
-                signatures[i] = calculateSignature(i, key, connectedPubKeyScript, hashType, anyoneCanPay);
-            } catch (ECKey.KeyIsEncryptedException e) {
-                throw e;
-            } catch (ECKey.MissingPrivateKeyException e) {
+            if (key.hasPrivKey() || key.isEncrypted()) {
+                signatures[i] = calculateSignature(i, key, aesKey, connectedPubKeyScript, hashType, anyoneCanPay);
+            } else {
                 // Create a dummy signature to ensure the transaction is of the correct size when we try to ensure
                 // the right fee-per-kb is attached. If the wallet doesn't have the privkey, the user is assumed to
                 // be doing something special and that they will replace the dummy signature with a real one later.
                 signatures[i] = TransactionSignature.dummy();
-                log.info("Used dummy signature for input {} due to failure during signing (most likely missing privkey)", i);
             }
         }
 
@@ -960,11 +897,11 @@ public class Transaction extends ChildMessage implements Serializable {
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
      */
-    public synchronized TransactionSignature calculateSignature(int inputIndex, ECKey key,
+    public synchronized  TransactionSignature calculateSignature(int inputIndex, ECKey key, @Nullable KeyParameter aesKey,
                                                                 byte[] connectedPubKeyScript,
                                                                 SigHash hashType, boolean anyoneCanPay) {
         Sha256Hash hash = hashForSignature(inputIndex, connectedPubKeyScript, hashType, anyoneCanPay);
-        return new TransactionSignature(key.sign(hash), hashType, anyoneCanPay);
+        return new TransactionSignature(key.sign(hash, aesKey), hashType, anyoneCanPay);
     }
 
     /**
@@ -1187,12 +1124,6 @@ public class Transaction extends ChildMessage implements Serializable {
         return Collections.unmodifiableList(outputs);
     }
 
-    /** Randomly re-orders the transaction outputs: good for privacy */
-    public void shuffleOutputs() {
-        maybeParse();
-        Collections.shuffle(outputs);
-    }
-
     /** @return the given transaction: same as getInputs().get(index). */
     public TransactionInput getInput(int index) {
         maybeParse();
@@ -1217,11 +1148,11 @@ public class Transaction extends ChildMessage implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Transaction other = (Transaction) o;
-        return getHash().equals(other.getHash());
+    public boolean equals(Object other) {
+        if (!(other instanceof Transaction)) return false;
+        Transaction t = (Transaction) other;
+
+        return t.getHash().equals(getHash());
     }
 
     @Override

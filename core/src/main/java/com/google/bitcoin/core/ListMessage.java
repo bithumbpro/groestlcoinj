@@ -122,14 +122,7 @@ public abstract class ListMessage extends Message {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ListMessage other = (ListMessage) o;
-        return items.equals(other.items);
-    }
-
-    @Override
-    public int hashCode() {
-        return items.hashCode();
+        return o.getClass() == this.getClass() &&
+                ((ListMessage)o).items.equals(this.items);
     }
 }

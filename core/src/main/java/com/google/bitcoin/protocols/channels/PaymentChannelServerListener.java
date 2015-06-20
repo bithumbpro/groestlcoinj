@@ -143,8 +143,6 @@ public class PaymentChannelServerListener {
                 return new ServerHandler(new InetSocketAddress(inetAddress, port), timeoutSeconds).socketProtobufHandler;
             }
         }, new InetSocketAddress(port));
-        //server.startAsync();
-        //server.awaitRunning();
         server.startAndWait();
     }
 
@@ -179,7 +177,6 @@ public class PaymentChannelServerListener {
      * wallet.</p>
      */
     public void close() {
-        server.stopAsync();
-        server.awaitTerminated();
+        server.stopAndWait();
     }
 }

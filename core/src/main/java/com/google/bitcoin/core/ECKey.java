@@ -16,11 +16,13 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.crypto.*;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterException;
+import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.bitcoin.NativeSecp256k1;
-import org.bitcoinj.wallet.Protos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.asn1.*;
@@ -28,11 +30,9 @@ import org.spongycastle.asn1.sec.SECNamedCurves;
 import org.spongycastle.asn1.x9.X9ECParameters;
 import org.spongycastle.asn1.x9.X9IntegerConverter;
 import org.spongycastle.crypto.AsymmetricCipherKeyPair;
-import org.spongycastle.crypto.digests.SHA256Digest;
 import org.spongycastle.crypto.generators.ECKeyPairGenerator;
 import org.spongycastle.crypto.params.*;
 import org.spongycastle.crypto.signers.ECDSASigner;
-import org.spongycastle.crypto.signers.HMacDSAKCalculator;
 import org.spongycastle.math.ec.ECAlgorithms;
 import org.spongycastle.math.ec.ECCurve;
 import org.spongycastle.math.ec.ECPoint;
@@ -49,11 +49,10 @@ import java.security.SignatureException;
 import java.util.Arrays;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-// TODO: Move this class to tracking compression state itself.
-// The Bouncy Castle guys are deprecating their own tracking of the compression state.
+// TODO: This class is quite a mess by now. Once users are migrated away from Java serialization for the wallets,
+// refactor this to have better internal layout and a more consistent API.
 
 /**
  * <p>Represents an elliptic curve public and (optionally) private key, usable for digital signatures but not encryption.
@@ -83,7 +82,7 @@ import static com.google.common.base.Preconditions.checkState;
  * this class so round-tripping preserves state. Unless you're working with old software or doing unusual things, you
  * can usually ignore the compressed/uncompressed distinction.</p>
  */
-public class ECKey implements EncryptableItem, Serializable {
+public class ECKey implements Serializable {
     private static final Logger log = LoggerFactory.getLogger(ECKey.class);
 
     /** The parameters of the secp256k1 curve that Bitcoin uses. */
@@ -108,32 +107,31 @@ public class ECKey implements EncryptableItem, Serializable {
 
     // The two parts of the key. If "priv" is set, "pub" can always be calculated. If "pub" is set but not "priv", we
     // can only verify signatures not make them.
-    protected final BigInteger priv;  // A field element.
-    protected final ECPoint pub;
-
+    // TODO: Redesign this class to use consistent internals and more efficient serialization.
+    private BigInteger priv;
+    private byte[] pub;
     // Creation time of the key in seconds since the epoch, or zero if the key was deserialized from a version that did
     // not have this field.
-    protected long creationTimeSeconds;
+    private long creationTimeSeconds;
 
-    protected KeyCrypter keyCrypter;
-    protected EncryptedData encryptedPrivateKey;
+    /**
+     * Instance of the KeyCrypter interface to use for encrypting and decrypting the key.
+     */
+    transient private KeyCrypter keyCrypter;
 
-    // Transient because it's calculated on demand/cached.
-    private transient byte[] pubKeyHash;
+    /**
+     * The encrypted private key information.
+     */
+    private EncryptedPrivateKey encryptedPrivateKey;
+
+    // Transient because it's calculated on demand.
+    transient private byte[] pubKeyHash;
 
     /**
      * Generates an entirely new keypair. Point compression is used so the resulting public key will be 33 bytes
      * (32 for the co-ordinate and 1 byte to represent the y bit).
      */
     public ECKey() {
-        this(secureRandom);
-    }
-
-    /**
-     * Generates an entirely new keypair with the given {@link SecureRandom} object. Point compression is used so the
-     * resulting public key will be 33 bytes (32 for the co-ordinate and 1 byte to represent the y bit).
-     */
-    public ECKey(SecureRandom secureRandom) {
         ECKeyPairGenerator generator = new ECKeyPairGenerator();
         ECKeyGenerationParameters keygenParams = new ECKeyGenerationParameters(CURVE, secureRandom);
         generator.init(keygenParams);
@@ -141,29 +139,17 @@ public class ECKey implements EncryptableItem, Serializable {
         ECPrivateKeyParameters privParams = (ECPrivateKeyParameters) keypair.getPrivate();
         ECPublicKeyParameters pubParams = (ECPublicKeyParameters) keypair.getPublic();
         priv = privParams.getD();
-        pub = CURVE.getCurve().decodePoint(pubParams.getQ().getEncoded(true));
-        creationTimeSeconds = Utils.currentTimeSeconds();
+        // Unfortunately Bouncy Castle does not let us explicitly change a point to be compressed, even though it
+        // could easily do so. We must re-build it here so the ECPoints withCompression flag can be set to true.
+        ECPoint uncompressed = pubParams.getQ();
+        ECPoint compressed = compressPoint(uncompressed);
+        pub = compressed.getEncoded();
+
+        creationTimeSeconds = Utils.currentTimeMillis() / 1000;
     }
 
-    protected ECKey(@Nullable BigInteger priv, ECPoint pub) {
-        this.priv = priv;
-        this.pub = checkNotNull(pub);
-    }
-
-    /**
-     * Utility for compressing an elliptic curve point. Returns the same point if it's already compressed.
-     * See the ECKey class docs for a discussion of point compression.
-     */
-    public static ECPoint compressPoint(ECPoint uncompressed) {
-        return CURVE.getCurve().decodePoint(uncompressed.getEncoded(true));
-    }
-
-    /**
-     * Utility for decompressing an elliptic curve point. Returns the same point if it's already compressed.
-     * See the ECKey class docs for a discussion of point compression.
-     */
-    public static ECPoint decompressPoint(ECPoint compressed) {
-        return CURVE.getCurve().decodePoint(compressed.getEncoded(false));
+    private static ECPoint compressPoint(ECPoint uncompressed) {
+        return new ECPoint.Fp(CURVE.getCurve(), uncompressed.getX(), uncompressed.getY(), true);
     }
 
     /**
@@ -174,67 +160,14 @@ public class ECKey implements EncryptableItem, Serializable {
         return extractKeyFromASN1(asn1privkey);
     }
 
-    /**
-     * Creates an ECKey given the private key only.  The public key is calculated from it (this is slow). Note that
-     * the resulting public key is compressed.
-     */
-    public static ECKey fromPrivate(BigInteger privKey) {
-        return new ECKey(privKey, compressPoint(CURVE.getG().multiply(privKey)));
+    /** Creates an ECKey given the private key only.  The public key is calculated from it (this is slow) */
+    public ECKey(BigInteger privKey) {
+        this(privKey, (byte[])null);
     }
 
-    /**
-     * Creates an ECKey given the private key only.  The public key is calculated from it (this is slow). The resulting
-     * public key is compressed.
-     */
-    public static ECKey fromPrivate(byte[] privKeyBytes) {
-        return fromPrivate(new BigInteger(1, privKeyBytes));
-    }
-
-    /**
-     * Creates an ECKey that simply trusts the caller to ensure that point is really the result of multiplying the
-     * generator point by the private key. This is used to speed things up when you know you have the right values
-     * already. The compression state of pub will be preserved.
-     */
-    public static ECKey fromPrivateAndPrecalculatedPublic(BigInteger priv, ECPoint pub) {
-        return new ECKey(priv, pub);
-    }
-
-    /**
-     * Creates an ECKey that simply trusts the caller to ensure that point is really the result of multiplying the
-     * generator point by the private key. This is used to speed things up when you know you have the right values
-     * already. The compression state of the point will be preserved.
-     */
-    public static ECKey fromPrivateAndPrecalculatedPublic(byte[] priv, byte[] pub) {
-        checkNotNull(priv);
-        checkNotNull(pub);
-        return new ECKey(new BigInteger(1, priv), CURVE.getCurve().decodePoint(pub));
-    }
-
-    /**
-     * Creates an ECKey that cannot be used for signing, only verifying signatures, from the given point. The
-     * compression state of pub will be preserved.
-     */
-    public static ECKey fromPublicOnly(ECPoint pub) {
-        return new ECKey(null, pub);
-    }
-
-    /**
-     * Creates an ECKey that cannot be used for signing, only verifying signatures, from the given encoded point.
-     * The compression state of pub will be preserved.
-     */
-    public static ECKey fromPublicOnly(byte[] pub) {
-        return new ECKey(null, CURVE.getCurve().decodePoint(pub));
-    }
-
-    /**
-     * Returns a copy of this key, but with the public point represented in uncompressed form. Normally you would
-     * never need this: it's for specialised scenarios or when backwards compatibility in encoded form is necessary.
-     */
-    public ECKey decompress() {
-        if (!pub.isCompressed())
-            return this;
-        else
-            return new ECKey(priv, decompressPoint(pub));
+    /** A constructor variant with BigInteger pubkey. See {@link ECKey#ECKey(BigInteger, byte[])}. */
+    public ECKey(BigInteger privKey, BigInteger pubKey) {
+        this(privKey, Utils.bigIntegerToBytes(pubKey, 65));
     }
 
     /**
@@ -242,7 +175,6 @@ public class ECKey implements EncryptableItem, Serializable {
      * is more convenient if you are importing a key from elsewhere. The public key will be automatically derived
      * from the private key.
      */
-    @Deprecated
     public ECKey(@Nullable byte[] privKeyBytes, @Nullable byte[] pubKey) {
         this(privKeyBytes == null ? null : new BigInteger(1, privKeyBytes), pubKey);
     }
@@ -254,24 +186,11 @@ public class ECKey implements EncryptableItem, Serializable {
      * @param pubKey The keys public key
      * @param keyCrypter The KeyCrypter that will be used, with an AES key, to encrypt and decrypt the private key
      */
-    @Deprecated
-    public ECKey(EncryptedData encryptedPrivateKey, byte[] pubKey, KeyCrypter keyCrypter) {
+    public ECKey(@Nullable EncryptedPrivateKey encryptedPrivateKey, @Nullable byte[] pubKey, KeyCrypter keyCrypter) {
         this((byte[])null, pubKey);
 
-        this.keyCrypter = checkNotNull(keyCrypter);
+        this.keyCrypter = Preconditions.checkNotNull(keyCrypter);
         this.encryptedPrivateKey = encryptedPrivateKey;
-    }
-
-    /**
-     * Constructs a key that has an encrypted private component. The given object wraps encrypted bytes and an
-     * initialization vector. Note that the key will not be decrypted during this call: the returned ECKey is
-     * unusable for signing unless a decryption key is supplied.
-     */
-    public static ECKey fromEncrypted(EncryptedData encryptedPrivateKey, KeyCrypter crypter, byte[] pubKey) {
-        ECKey key = fromPublicOnly(pubKey);
-        key.encryptedPrivateKey = checkNotNull(encryptedPrivateKey);
-        key.keyCrypter = checkNotNull(crypter);
-        return key;
     }
 
     /**
@@ -281,22 +200,19 @@ public class ECKey implements EncryptableItem, Serializable {
      * be used for signing.
      * @param compressed If set to true and pubKey is null, the derived public key will be in compressed form.
      */
-    @Deprecated
     public ECKey(@Nullable BigInteger privKey, @Nullable byte[] pubKey, boolean compressed) {
         if (privKey == null && pubKey == null)
             throw new IllegalArgumentException("ECKey requires at least private or public key");
         this.priv = privKey;
+        this.pub = null;
         if (pubKey == null) {
             // Derive public from private.
-            ECPoint point = CURVE.getG().multiply(privKey);
-            if (compressed)
-                point = compressPoint(point);
-            this.pub = point;
+            this.pub = publicKeyFromPrivate(privKey, compressed);
         } else {
             // We expect the pubkey to be in regular encoded form, just as a BigInteger. Therefore the first byte is
             // a special marker byte.
             // TODO: This is probably not a useful API and may be confusing.
-            this.pub = CURVE.getCurve().decodePoint(pubKey);
+            this.pub = pubKey;
         }
     }
 
@@ -306,7 +222,6 @@ public class ECKey implements EncryptableItem, Serializable {
      * the public key already correctly matches the public key. If only the public key is supplied, this ECKey cannot
      * be used for signing.
      */
-    @Deprecated
     private ECKey(@Nullable BigInteger privKey, @Nullable byte[] pubKey) {
         this(privKey, pubKey, false);
     }
@@ -335,7 +250,6 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public byte[] toASN1() {
         try {
-            byte[] privKeyBytes = getPrivKeyBytes();
             ByteArrayOutputStream baos = new ByteArrayOutputStream(400);
 
             // ASN1_SEQUENCE(EC_PRIVATEKEY) = {
@@ -346,7 +260,7 @@ public class ECKey implements EncryptableItem, Serializable {
             // } ASN1_SEQUENCE_END(EC_PRIVATEKEY)
             DERSequenceGenerator seq = new DERSequenceGenerator(baos);
             seq.addObject(new ASN1Integer(1)); // version
-            seq.addObject(new DEROctetString(privKeyBytes));
+            seq.addObject(new DEROctetString(priv.toByteArray()));
             seq.addObject(new DERTaggedObject(0, SECNamedCurves.getByName("secp256k1").toASN1Primitive()));
             seq.addObject(new DERTaggedObject(1, new DERBitString(getPubKey())));
             seq.close();
@@ -362,13 +276,15 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public static byte[] publicKeyFromPrivate(BigInteger privKey, boolean compressed) {
         ECPoint point = CURVE.getG().multiply(privKey);
-        return point.getEncoded(compressed);
+        if (compressed)
+            point = compressPoint(point);
+        return point.getEncoded();
     }
 
     /** Gets the hash160 form of the public key (as seen in addresses). */
     public byte[] getPubKeyHash() {
         if (pubKeyHash == null)
-            pubKeyHash = Utils.sha256hash160(this.pub.getEncoded());
+            pubKeyHash = Utils.sha256hash160(this.pub);
         return pubKeyHash;
     }
 
@@ -377,36 +293,19 @@ public class ECKey implements EncryptableItem, Serializable {
      * as the pubKeyHash/address.
      */
     public byte[] getPubKey() {
-        return pub.getEncoded();
-    }
-
-    /** Gets the public key in the form of an elliptic curve point object from Bouncy Castle. */
-    public ECPoint getPubKeyPoint() {
         return pub;
-    }
-
-    /**
-     * Gets the private key in the form of an integer field element. The public key is derived by performing EC
-     * point addition this number of times (i.e. point multiplying).
-     *
-     * @throws java.lang.IllegalStateException if the private key bytes are not available.
-     */
-    public BigInteger getPrivKey() {
-        if (priv == null)
-            throw new MissingPrivateKeyException();
-        return priv;
     }
 
     /**
      * Returns whether this key is using the compressed form or not. Compressed pubkeys are only 33 bytes, not 64.
      */
     public boolean isCompressed() {
-        return pub.isCompressed();
+        return pub.length == 33;
     }
 
     public String toString() {
         StringBuilder b = new StringBuilder();
-        b.append("pub:").append(Utils.bytesToHexString(pub.getEncoded()));
+        b.append("pub:").append(Utils.bytesToHexString(pub));
         if (creationTimeSeconds != 0) {
             b.append(" timestamp:").append(creationTimeSeconds);
         }
@@ -434,7 +333,21 @@ public class ECKey implements EncryptableItem, Serializable {
      * the RIPEMD-160 hash of the public key and is not the public key itself (which is too large to be convenient).
      */
     public Address toAddress(NetworkParameters params) {
-        return new Address(params, getPubKeyHash());
+        byte[] hash160 = Utils.sha256hash160(pub);
+        return new Address(params, hash160);
+    }
+
+    /**
+     * Clears all the ECKey private key contents from memory.
+     * WARNING - this method irreversibly deletes the private key information.
+     * It turns the ECKEy into a watch only key.
+     */
+    public void clearPrivateKey() {
+       priv = BigInteger.ZERO;
+
+       if (encryptedPrivateKey != null) {
+           encryptedPrivateKey.clear();
+       }
     }
 
     /**
@@ -444,7 +357,7 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public static class ECDSASignature {
         /** The two components of the signature. */
-        public final BigInteger r, s;
+        public BigInteger r, s;
 
         /**
          * Constructs a signature with the given components. Does NOT automatically canonicalise the signature.
@@ -461,16 +374,14 @@ public class ECKey implements EncryptableItem, Serializable {
          * been signed, as that violates various assumed invariants. Thus in future only one of those forms will be
          * considered legal and the other will be banned.
          */
-        public ECDSASignature toCanonicalised() {
+        public void ensureCanonical() {
             if (s.compareTo(HALF_CURVE_ORDER) > 0) {
                 // The order of the curve is the number of valid points that exist on that curve. If S is in the upper
                 // half of the number of valid points, then bring it back to the lower half. Otherwise, imagine that
                 //    N = 10
                 //    s = 8, so (-8 % 10 == 2) thus both (r, 8) and (r, 2) are valid solutions.
                 //    10 - 8 == 2, giving us always the latter solution, which is canonical.
-                return new ECDSASignature(r, CURVE.getN().subtract(s));
-            } else {
-                return this;
+                s = CURVE.getN().subtract(s);
             }
         }
 
@@ -491,10 +402,10 @@ public class ECKey implements EncryptableItem, Serializable {
             try {
                 ASN1InputStream decoder = new ASN1InputStream(bytes);
                 DLSequence seq = (DLSequence) decoder.readObject();
-                ASN1Integer r, s;
+                DERInteger r, s;
                 try {
-                    r = (ASN1Integer) seq.getObjectAt(0);
-                    s = (ASN1Integer) seq.getObjectAt(1);
+                    r = (DERInteger) seq.getObjectAt(0);
+                    s = (DERInteger) seq.getObjectAt(1);
                 } catch (ClassCastException e) {
                     throw new IllegalArgumentException(e);
                 }
@@ -511,26 +422,10 @@ public class ECKey implements EncryptableItem, Serializable {
             // Usually 70-72 bytes.
             ByteArrayOutputStream bos = new ByteArrayOutputStream(72);
             DERSequenceGenerator seq = new DERSequenceGenerator(bos);
-            seq.addObject(new ASN1Integer(r));
-            seq.addObject(new ASN1Integer(s));
+            seq.addObject(new DERInteger(r));
+            seq.addObject(new DERInteger(s));
             seq.close();
             return bos;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ECDSASignature other = (ECDSASignature) o;
-            return r.equals(other.r) &&
-                   s.equals(other.s);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = r.hashCode();
-            result = 31 * result + s.hashCode();
-            return result;
         }
     }
 
@@ -563,28 +458,42 @@ public class ECKey implements EncryptableItem, Serializable {
      * @throws KeyCrypterException if this ECKey doesn't have a private part.
      */
     public ECDSASignature sign(Sha256Hash input, @Nullable KeyParameter aesKey) throws KeyCrypterException {
-        KeyCrypter crypter = getKeyCrypter();
-        if (crypter != null) {
-            if (aesKey == null)
-                throw new KeyIsEncryptedException();
-            return decrypt(aesKey).sign(input);
-        } else {
-            // No decryption of private key required.
-            if (priv == null)
-                throw new MissingPrivateKeyException();
-        }
-        return doSign(input, priv);
-    }
-
-    protected ECDSASignature doSign(Sha256Hash input, BigInteger privateKeyForSigning) {
         if (FAKE_SIGNATURES)
             return TransactionSignature.dummy();
-        checkNotNull(privateKeyForSigning);
-        ECDSASigner signer = new ECDSASigner(new HMacDSAKCalculator(new SHA256Digest()));
+
+        // The private key bytes to use for signing.
+        BigInteger privateKeyForSigning;
+
+        if (isEncrypted()) {
+            // The private key needs decrypting before use.
+            if (aesKey == null) {
+                throw new KeyCrypterException("This ECKey is encrypted but no decryption key has been supplied.");
+            }
+
+            if (keyCrypter == null) {
+                throw new KeyCrypterException("There is no KeyCrypter to decrypt the private key for signing.");
+            }
+
+            privateKeyForSigning = new BigInteger(1, keyCrypter.decrypt(encryptedPrivateKey, aesKey));
+            // Check encryption was correct.
+            if (!Arrays.equals(pub, publicKeyFromPrivate(privateKeyForSigning, isCompressed())))
+                throw new KeyCrypterException("Could not decrypt bytes");
+        } else {
+            // No decryption of private key required.
+            if (priv == null) {
+                throw new KeyCrypterException("This ECKey does not have the private key necessary for signing.");
+            } else {
+                privateKeyForSigning = priv;
+        }
+    }
+
+        ECDSASigner signer = new ECDSASigner();
         ECPrivateKeyParameters privKey = new ECPrivateKeyParameters(privateKeyForSigning, CURVE);
         signer.init(true, privKey);
         BigInteger[] components = signer.generateSignature(input.getBytes());
-        return new ECDSASignature(components[0], components[1]).toCanonicalised();
+        final ECDSASignature signature = new ECDSASignature(components[0], components[1]);
+        signature.ensureCanonical();
+        return signature;
     }
 
     /**
@@ -649,6 +558,13 @@ public class ECKey implements EncryptableItem, Serializable {
     }
 
     /**
+     * Returns true if this pubkey is canonical, i.e. the correct length taking into account compression.
+     */
+    public boolean isPubKeyCanonical() {
+        return isPubKeyCanonical(pub);
+    }
+
+    /**
      * Returns true if the given pubkey is canonical, i.e. the correct length taking into account compression.
      */
     public static boolean isPubKeyCanonical(byte[] pubkey) {
@@ -682,7 +598,7 @@ public class ECKey implements EncryptableItem, Serializable {
             ASN1InputStream decoder = new ASN1InputStream(asn1privkey);
             DLSequence seq = (DLSequence) decoder.readObject();
             checkArgument(seq.size() == 4, "Input does not appear to be an ASN.1 OpenSSL EC private key");
-            checkArgument(((ASN1Integer) seq.getObjectAt(0)).getValue().equals(BigInteger.ONE),
+            checkArgument(((DERInteger) seq.getObjectAt(0)).getValue().equals(BigInteger.ONE),
                     "Input is of wrong version");
             Object obj = seq.getObjectAt(1);
             byte[] privbits = ((ASN1OctetString) obj).getOctets();
@@ -722,7 +638,7 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public String signMessage(String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
         if (priv == null)
-            throw new MissingPrivateKeyException();
+            throw new IllegalStateException("This ECKey does not have the private key necessary for signing.");
         byte[] data = Utils.formatMessageForSigning(message);
         Sha256Hash hash = Sha256Hash.createSingle(data);
         ECDSASignature sig = sign(hash, aesKey);
@@ -730,7 +646,7 @@ public class ECKey implements EncryptableItem, Serializable {
         int recId = -1;
         for (int i = 0; i < 4; i++) {
             ECKey k = ECKey.recoverFromSignature(i, sig, hash, isCompressed());
-            if (k != null && k.pub.equals(pub)) {
+            if (k != null && Arrays.equals(k.pub, pub)) {
                 recId = i;
                 break;
             }
@@ -797,7 +713,7 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public void verifyMessage(String message, String signatureBase64) throws SignatureException {
         ECKey key = ECKey.signedMessageToKey(message, signatureBase64);
-        if (!key.pub.equals(pub))
+        if (!Arrays.equals(key.getPubKey(), pub))
             throw new SignatureException("Signature did not match for message");
     }
 
@@ -869,7 +785,11 @@ public class ECKey implements EncryptableItem, Serializable {
         BigInteger srInv = rInv.multiply(sig.s).mod(n);
         BigInteger eInvrInv = rInv.multiply(eInv).mod(n);
         ECPoint.Fp q = (ECPoint.Fp) ECAlgorithms.sumOfTwoMultiplies(CURVE.getG(), eInvrInv, R, srInv);
-        return ECKey.fromPublicOnly(q.getEncoded(compressed));
+        if (compressed) {
+            // We have to manually recompress the point as the compressed-ness gets lost when multiply() is used.
+            q = new ECPoint.Fp(curve, q.getX(), q.getY(), true);
+        }
+        return new ECKey((byte[])null, q.getEncoded());
     }
 
     /** Decompress a compressed public key (x co-ord and low-bit of y-coord). */
@@ -884,8 +804,9 @@ public class ECKey implements EncryptableItem, Serializable {
      * Returns a 32 byte array containing the private key.
      * @throws com.google.bitcoin.core.ECKey.MissingPrivateKeyException if the private key bytes are missing/encrypted.
      */
+    @Nullable
     public byte[] getPrivKeyBytes() {
-        return Utils.bigIntegerToBytes(getPrivKey(), 32);
+        return Utils.bigIntegerToBytes(priv, 32);
     }
 
     /**
@@ -897,14 +818,15 @@ public class ECKey implements EncryptableItem, Serializable {
      * @throws IllegalStateException if the private key is not available.
      */
     public DumpedPrivateKey getPrivateKeyEncoded(NetworkParameters params) {
-        return new DumpedPrivateKey(params, getPrivKeyBytes(), isCompressed());
+        final byte[] privKeyBytes = getPrivKeyBytes();
+        checkState(privKeyBytes != null, "Private key is not available");
+        return new DumpedPrivateKey(params, privKeyBytes, isCompressed());
     }
 
     /**
      * Returns the creation time of this key or zero if the key was deserialized from a version that did not store
      * that data.
      */
-    @Override
     public long getCreationTimeSeconds() {
         return creationTimeSeconds;
     }
@@ -922,24 +844,18 @@ public class ECKey implements EncryptableItem, Serializable {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || !(o instanceof ECKey)) return false;
+        if (o == null || getClass() != o.getClass()) return false;
 
         ECKey ecKey = (ECKey) o;
 
-        if (creationTimeSeconds != ecKey.creationTimeSeconds) return false;
-        if (keyCrypter != null ? !keyCrypter.equals(ecKey.keyCrypter) : ecKey.keyCrypter != null) return false;
-        if (priv != null && !priv.equals(ecKey.priv)) return false;
-        if (pub != null && !pub.equals(ecKey.pub)) return false;
-
-        return true;
+        return Arrays.equals(pub, ecKey.pub);
     }
 
     @Override
     public int hashCode() {
         // Public keys are random already so we can just use a part of them as the hashcode. Read from the start to
         // avoid picking up the type code (compressed vs uncompressed) which is tacked on the end.
-        byte[] bits = getPubKey();
-        return (bits[0] & 0xFF) | ((bits[1] & 0xFF) << 8) | ((bits[2] & 0xFF) << 16) | ((bits[3] & 0xFF) << 24);
+        return (pub[0] & 0xFF) | ((pub[1] & 0xFF) << 8) | ((pub[2] & 0xFF) << 16) | ((pub[3] & 0xFF) << 24);
     }
 
     /**
@@ -951,12 +867,11 @@ public class ECKey implements EncryptableItem, Serializable {
      * @return encryptedKey
      */
     public ECKey encrypt(KeyCrypter keyCrypter, KeyParameter aesKey) throws KeyCrypterException {
-        checkNotNull(keyCrypter);
+        Preconditions.checkNotNull(keyCrypter);
         final byte[] privKeyBytes = getPrivKeyBytes();
-        EncryptedData encryptedPrivateKey = keyCrypter.encrypt(privKeyBytes, aesKey);
-        ECKey result = ECKey.fromEncrypted(encryptedPrivateKey, keyCrypter, getPubKey());
-        result.setCreationTimeSeconds(creationTimeSeconds);
-        return result;
+        checkState(privKeyBytes != null, "Private key is not available");
+        EncryptedPrivateKey encryptedPrivateKey = keyCrypter.encrypt(privKeyBytes, aesKey);
+        return new ECKey(encryptedPrivateKey, getPubKey(), keyCrypter);
     }
 
     /**
@@ -968,60 +883,60 @@ public class ECKey implements EncryptableItem, Serializable {
      * @param aesKey The KeyParameter with the AES encryption key (usually constructed with keyCrypter#deriveKey and cached).
      */
     public ECKey decrypt(KeyCrypter keyCrypter, KeyParameter aesKey) throws KeyCrypterException {
-        checkNotNull(keyCrypter);
+        Preconditions.checkNotNull(keyCrypter);
         // Check that the keyCrypter matches the one used to encrypt the keys, if set.
-        if (this.keyCrypter != null && !this.keyCrypter.equals(keyCrypter))
+        if (this.keyCrypter != null && !this.keyCrypter.equals(keyCrypter)) {
             throw new KeyCrypterException("The keyCrypter being used to decrypt the key is different to the one that was used to encrypt it");
-        checkState(encryptedPrivateKey != null, "This key is not encrypted");
+        }
         byte[] unencryptedPrivateKey = keyCrypter.decrypt(encryptedPrivateKey, aesKey);
-        ECKey key = ECKey.fromPrivate(unencryptedPrivateKey);
-        if (!isCompressed())
-            key = key.decompress();
+        ECKey key = new ECKey(new BigInteger(1, unencryptedPrivateKey), null, isCompressed());
         if (!Arrays.equals(key.getPubKey(), getPubKey()))
             throw new KeyCrypterException("Provided AES key is wrong");
-        key.setCreationTimeSeconds(creationTimeSeconds);
         return key;
     }
 
     /**
-     * Create a decrypted private key with AES key. Note that if the AES key is wrong, this
-     * has some chance of throwing KeyCrypterException due to the corrupted padding that will result, but it can also
-     * just yield a garbage key.
-     *
-     * @param aesKey The KeyParameter with the AES encryption key (usually constructed with keyCrypter#deriveKey and cached).
-     */
-    public ECKey decrypt(KeyParameter aesKey) throws KeyCrypterException {
-        final KeyCrypter crypter = getKeyCrypter();
-        if (crypter == null)
-            throw new KeyCrypterException("No key crypter available");
-        return decrypt(crypter, aesKey);
-    }
-
-    /**
-     * <p>Check that it is possible to decrypt the key with the keyCrypter and that the original key is returned.</p>
-     *
-     * <p>Because it is a critical failure if the private keys cannot be decrypted successfully (resulting of loss of all
-     * bitcoins controlled by the private key) you can use this method to check when you *encrypt* a wallet that
-     * it can definitely be decrypted successfully.</p>
+     * Check that it is possible to decrypt the key with the keyCrypter and that the original key is returned.
      *
      * <p>See {@link Wallet#encrypt(KeyCrypter keyCrypter, KeyParameter aesKey)} for example usage.</p>
      *
      * @return true if the encrypted key can be decrypted back to the original key successfully.
      */
     public static boolean encryptionIsReversible(ECKey originalKey, ECKey encryptedKey, KeyCrypter keyCrypter, KeyParameter aesKey) {
+        String genericErrorText = "The check that encryption could be reversed failed for key " + originalKey.toString() + ". ";
         try {
             ECKey rebornUnencryptedKey = encryptedKey.decrypt(keyCrypter, aesKey);
-            byte[] originalPrivateKeyBytes = originalKey.getPrivKeyBytes();
-            byte[] rebornKeyBytes = rebornUnencryptedKey.getPrivKeyBytes();
-            if (!Arrays.equals(originalPrivateKeyBytes, rebornKeyBytes)) {
-                log.error("The check that encryption could be reversed failed for {}", originalKey);
+            if (rebornUnencryptedKey == null) {
+                log.error(genericErrorText + "The test decrypted key was missing.");
                 return false;
             }
-            return true;
+
+            byte[] originalPrivateKeyBytes = originalKey.getPrivKeyBytes();
+            if (originalPrivateKeyBytes != null) {
+                if (rebornUnencryptedKey.getPrivKeyBytes() == null) {
+                    log.error(genericErrorText + "The test decrypted key was missing.");
+                    return false;
+                } else {
+                    if (originalPrivateKeyBytes.length != rebornUnencryptedKey.getPrivKeyBytes().length) {
+                        log.error(genericErrorText + "The test decrypted private key was a different length to the original.");
+                        return false;
+                    } else {
+                        for (int i = 0; i < originalPrivateKeyBytes.length; i++) {
+                            if (originalPrivateKeyBytes[i] != rebornUnencryptedKey.getPrivKeyBytes()[i]) {
+                                log.error(genericErrorText + "Byte " + i + " of the private key did not match the original.");
+                return false;
+            }
+                        }
+                    }
+                }
+            }
         } catch (KeyCrypterException kce) {
             log.error(kce.getMessage());
             return false;
         }
+
+        // Key can successfully be decrypted.
+        return true;
     }
 
     /**
@@ -1029,55 +944,26 @@ public class ECKey implements EncryptableItem, Serializable {
      * A private key is deemed to be encrypted when there is both a KeyCrypter and the encryptedPrivateKey is non-zero.
      */
     public boolean isEncrypted() {
-        return keyCrypter != null && encryptedPrivateKey != null && encryptedPrivateKey.encryptedBytes.length > 0;
-    }
-
-    @Nullable
-    @Override
-    public Protos.Wallet.EncryptionType getEncryptionType() {
-        return keyCrypter != null ? keyCrypter.getUnderstoodEncryptionType() : Protos.Wallet.EncryptionType.UNENCRYPTED;
+         return keyCrypter != null && encryptedPrivateKey != null && encryptedPrivateKey.getEncryptedBytes() != null &&  encryptedPrivateKey.getEncryptedBytes().length > 0;
     }
 
     /**
      * A wrapper for {@link #getPrivKeyBytes()} that returns null if the private key bytes are missing or would have
      * to be derived (for the HD key case).
      */
-    @Override
     @Nullable
-    public byte[] getSecretBytes() {
-        if (hasPrivKey())
-            return getPrivKeyBytes();
-        else
+    public EncryptedPrivateKey getEncryptedPrivateKey() {
+        if (encryptedPrivateKey == null) {
             return null;
+        } else {
+            return encryptedPrivateKey.clone();
     }
-
-    /** An alias for {@link #getEncryptedPrivateKey()} */
-    @Nullable
-    @Override
-    public EncryptedData getEncryptedData() {
-        return getEncryptedPrivateKey();
-    }
-
-    /**
-     * Returns the the encrypted private key bytes and initialisation vector for this ECKey, or null if the ECKey
-     * is not encrypted.
-     */
-    @Nullable
-    public EncryptedData getEncryptedPrivateKey() {
-        return encryptedPrivateKey;
     }
 
     /**
      * Returns the KeyCrypter that was used to encrypt to encrypt this ECKey. You need this to decrypt the ECKey.
      */
-    @Nullable
     public KeyCrypter getKeyCrypter() {
         return keyCrypter;
-    }
-
-    public static class MissingPrivateKeyException extends RuntimeException {
-    }
-
-    public static class KeyIsEncryptedException extends MissingPrivateKeyException {
     }
 }

@@ -1,6 +1,5 @@
 /**
  * Copyright 2011 Google Inc.
- * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +45,7 @@ public class PrivateKeys {
                 key = dumpedPrivateKey.getKey();
             } else {
                 BigInteger privKey = Base58.decodeToBigInteger(args[0]);
-                key = ECKey.fromPrivate(privKey);
+                key = new ECKey(privKey);
             }
             System.out.println("Address from private key is: " + key.toAddress(params).toString());
             // And the address ...
@@ -54,7 +53,7 @@ public class PrivateKeys {
 
             // Import the private key to a fresh wallet.
             Wallet wallet = new Wallet(params);
-            wallet.importKey(key);
+            wallet.addKey(key);
 
             // Find the transactions that involve those coins.
             final MemoryBlockStore blockStore = new MemoryBlockStore(params);
@@ -62,9 +61,9 @@ public class PrivateKeys {
 
             final PeerGroup peerGroup = new PeerGroup(params, chain);
             peerGroup.addAddress(new PeerAddress(InetAddress.getLocalHost()));
-            peerGroup.startAsync();
+            peerGroup.start();
             peerGroup.downloadBlockChain();
-            peerGroup.stopAsync();
+            peerGroup.stop();
 
             // And take them!
             System.out.println("Claiming " + Utils.bitcoinValueToFriendlyString(wallet.getBalance()) + " coins");

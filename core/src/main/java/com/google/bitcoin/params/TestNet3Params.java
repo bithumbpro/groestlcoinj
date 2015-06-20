@@ -35,7 +35,7 @@ public class TestNet3Params extends NetworkParameters {
         packetMagic = 0x0b110907;
         interval = INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
-        maxTarget = Utils.decodeCompactBits(0x1d00ffffL);
+        proofOfWorkLimit = Utils.decodeCompactBits(0x1d00ffffL);
         port = 18333;
         addressHeader = CoinDefinition.testnetAddressHeader;
         p2shHeader = CoinDefinition.testnetp2shHeader;

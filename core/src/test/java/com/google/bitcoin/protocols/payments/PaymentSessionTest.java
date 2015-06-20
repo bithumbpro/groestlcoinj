@@ -18,8 +18,6 @@
 package com.google.bitcoin.protocols.payments;
 
 import com.google.bitcoin.core.*;
-import com.google.bitcoin.crypto.TrustStoreLoader;
-import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.TestNet3Params;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
@@ -58,7 +56,7 @@ public class PaymentSessionTest {
     @Test
     public void testSimplePayment() throws Exception {
         // Create a PaymentRequest and make sure the correct values are parsed by the PaymentSession.
-        MockPaymentSession paymentSession = new MockPaymentSession(newSimplePaymentRequest("test"));
+        MockPaymentSession paymentSession = new MockPaymentSession(newSimplePaymentRequest());
         assertEquals(paymentRequestMemo, paymentSession.getMemo());
         assertEquals(nanoCoins, paymentSession.getValue());
         assertEquals(simplePaymentUrl, paymentSession.getPaymentUrl());
@@ -113,7 +111,7 @@ public class PaymentSessionTest {
         txns.add(tx);
         try {
             paymentSession.sendPayment(txns, null, null);
-        } catch(PaymentProtocolException.Expired e) {
+        } catch(PaymentRequestException.Expired e) {
             assertEquals(0, paymentSession.getPaymentLog().size());
             assertEquals(e.getMessage(), "PaymentRequest is expired");
             return;
@@ -125,45 +123,30 @@ public class PaymentSessionTest {
     public void testPkiVerification() throws Exception {
         InputStream in = getClass().getResourceAsStream("pki_test.bitcoinpaymentrequest");
         Protos.PaymentRequest paymentRequest = Protos.PaymentRequest.newBuilder().mergeFrom(in).build();
-        PaymentProtocol.PkiVerificationData pkiData = PaymentProtocol.verifyPaymentRequestPki(paymentRequest,
-                new TrustStoreLoader.DefaultTrustStoreLoader().getKeyStore());
-        assertEquals("www.bitcoincore.org", pkiData.displayName);
+        MockPaymentSession paymentSession = new MockPaymentSession(paymentRequest);
+        PaymentSession.PkiVerificationData pkiData = paymentSession.verifyPki();
+        assertEquals("www.bitcoincore.org", pkiData.name);
         assertEquals("The USERTRUST Network, Salt Lake City, US", pkiData.rootAuthorityName);
     }
 
-    @Test(expected = PaymentProtocolException.InvalidNetwork.class)
-    public void testWrongNetwork() throws Exception {
-        // Create a PaymentRequest and make sure the correct values are parsed by the PaymentSession.
-        MockPaymentSession paymentSession = new MockPaymentSession(newSimplePaymentRequest("main"));
-        assertEquals(MainNetParams.get(), paymentSession.getNetworkParameters());
-
-        // Send the payment and verify that the correct information is sent.
-        // Add a dummy input to tx so it is considered valid.
-        tx.addInput(new TransactionInput(params, tx, outputToMe.getScriptBytes()));
-        ArrayList<Transaction> txns = new ArrayList<Transaction>();
-        txns.add(tx);
-        Address refundAddr = new Address(params, serverKey.getPubKeyHash());
-        paymentSession.sendPayment(txns, refundAddr, paymentMemo);
-        assertEquals(1, paymentSession.getPaymentLog().size());
-    }
-
-    private Protos.PaymentRequest newSimplePaymentRequest(String netID) {
+    private Protos.PaymentRequest newSimplePaymentRequest() {
         Protos.Output.Builder outputBuilder = Protos.Output.newBuilder()
                 .setAmount(nanoCoins.longValue())
                 .setScript(ByteString.copyFrom(outputToMe.getScriptBytes()));
         Protos.PaymentDetails paymentDetails = Protos.PaymentDetails.newBuilder()
-                .setNetwork(netID)
+                .setNetwork("test")
                 .setTime(time)
                 .setPaymentUrl(simplePaymentUrl)
                 .addOutputs(outputBuilder)
                 .setMemo(paymentRequestMemo)
                 .setMerchantData(merchantData)
                 .build();
-        return Protos.PaymentRequest.newBuilder()
+        Protos.PaymentRequest paymentRequest = Protos.PaymentRequest.newBuilder()
                 .setPaymentDetailsVersion(1)
                 .setPkiType("none")
                 .setSerializedPaymentDetails(paymentDetails.toByteString())
                 .build();
+        return paymentRequest;
     }
 
     private Protos.PaymentRequest newExpiredPaymentRequest() {
@@ -179,17 +162,18 @@ public class PaymentSessionTest {
                 .setMemo(paymentRequestMemo)
                 .setMerchantData(merchantData)
                 .build();
-        return Protos.PaymentRequest.newBuilder()
+        Protos.PaymentRequest paymentRequest  = Protos.PaymentRequest.newBuilder()
                 .setPaymentDetailsVersion(1)
                 .setPkiType("none")
                 .setSerializedPaymentDetails(paymentDetails.toByteString())
                 .build();
+        return paymentRequest ;
     }
 
     private class MockPaymentSession extends PaymentSession {
         private ArrayList<PaymentLogItem> paymentLog = new ArrayList<PaymentLogItem>();
 
-        public MockPaymentSession(Protos.PaymentRequest request) throws PaymentProtocolException {
+        public MockPaymentSession(Protos.PaymentRequest request) throws PaymentRequestException {
             super(request);
         }
 
@@ -197,7 +181,7 @@ public class PaymentSessionTest {
             return paymentLog;
         }
 
-        protected ListenableFuture<PaymentProtocol.Ack> sendPayment(final URL url, final Protos.Payment payment) {
+        protected ListenableFuture<Ack> sendPayment(final URL url, final Protos.Payment payment) {
             paymentLog.add(new PaymentLogItem(url, payment));
             return null;
         }

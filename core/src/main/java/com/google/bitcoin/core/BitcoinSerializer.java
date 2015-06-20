@@ -71,7 +71,6 @@ public class BitcoinSerializer {
         names.put(FilteredBlock.class, "merkleblock");
         names.put(NotFoundMessage.class, "notfound");
         names.put(MemoryPoolMessage.class, "mempool");
-        names.put(RejectMessage.class, "reject");
     }
 
     /**
@@ -235,8 +234,6 @@ public class BitcoinSerializer {
             return new NotFoundMessage(params, payloadBytes);
         } else if (command.equals("mempool")) {
             return new MemoryPoolMessage();
-        } else if (command.equals("reject")) {
-            return new RejectMessage(params, payloadBytes);
         } else {
             log.warn("No support for deserializing message with name {}", command);
             return new UnknownMessage(params, command, payloadBytes);
@@ -299,15 +296,16 @@ public class BitcoinSerializer {
 
             // The command is a NULL terminated string, unless the command fills all twelve bytes
             // in which case the termination is implicit.
-            for (; header[cursor] != 0 && cursor < COMMAND_LEN; cursor++) ;
-            byte[] commandBytes = new byte[cursor];
-            System.arraycopy(header, 0, commandBytes, 0, cursor);
+            int mark = cursor;
+            for (; header[cursor] != 0 && cursor - mark < COMMAND_LEN; cursor++) ;
+            byte[] commandBytes = new byte[cursor - mark];
+            System.arraycopy(header, mark, commandBytes, 0, cursor - mark);
             try {
                 command = new String(commandBytes, "US-ASCII");
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);  // Cannot happen.
             }
-            cursor = COMMAND_LEN;
+            cursor = mark + COMMAND_LEN;
 
             size = (int) readUint32(header, cursor);
             cursor += 4;

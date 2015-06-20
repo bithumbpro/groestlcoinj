@@ -201,8 +201,7 @@ public class VersionMessage extends Message {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof VersionMessage)) return false;
         VersionMessage other = (VersionMessage) o;
         return other.bestHeight == bestHeight &&
                 other.clientVersion == clientVersion &&
@@ -212,12 +211,6 @@ public class VersionMessage extends Message {
                 other.myAddr.equals(myAddr) &&
                 other.theirAddr.equals(theirAddr) &&
                 other.relayTxesBeforeFilter == relayTxesBeforeFilter;
-    }
-
-    @Override
-    public int hashCode() {
-        return (int) bestHeight ^ clientVersion ^ (int) localServices ^ (int) time ^ subVer.hashCode() ^ myAddr.hashCode()
-            ^ theirAddr.hashCode() * (relayTxesBeforeFilter ? 1 : 2);
     }
 
     /**
@@ -234,6 +227,12 @@ public class VersionMessage extends Message {
     @Override
     void setChecksum(byte[] checksum) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int hashCode() {
+        return (int) bestHeight ^ clientVersion ^ (int) localServices ^ (int) time ^ subVer.hashCode() ^ myAddr.hashCode()
+                ^ theirAddr.hashCode() * (relayTxesBeforeFilter ? 1 : 2);
     }
 
     public String toString() {

@@ -25,8 +25,6 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.ref.WeakReference;
-import java.math.BigInteger;
-import java.util.Arrays;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkElementIndex;
@@ -56,32 +54,28 @@ public class TransactionInput extends ChildMessage implements Serializable {
     // The Script object obtained from parsing scriptBytes. Only filled in on demand and if the transaction is not
     // coinbase.
     transient private WeakReference<Script> scriptSig;
-    /** Value of the output connected to the input, if known. This field does not participate in equals()/hashCode(). */
-    @Nullable
-    private final BigInteger value;
     // A pointer to the transaction that owns this input.
-    private final Transaction parentTransaction;
+    private Transaction parentTransaction;
 
     /**
      * Creates an input that connects to nothing - used only in creation of coinbase transactions.
      */
     public TransactionInput(NetworkParameters params, Transaction parentTransaction, byte[] scriptBytes) {
-        this(params, parentTransaction, scriptBytes, new TransactionOutPoint(params, NO_SEQUENCE, (Transaction) null));
+        super(params);
+        this.scriptBytes = scriptBytes;
+        this.outpoint = new TransactionOutPoint(params, NO_SEQUENCE, (Transaction)null);
+        this.sequence = NO_SEQUENCE;
+        this.parentTransaction = parentTransaction;
+        length = 40 + (scriptBytes == null ? 1 : VarInt.sizeOf(scriptBytes.length) + scriptBytes.length);
     }
 
     public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes,
                             TransactionOutPoint outpoint) {
-        this(params, parentTransaction, scriptBytes, outpoint, null);
-    }
-
-    public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes,
-            TransactionOutPoint outpoint, @Nullable BigInteger value) {
         super(params);
         this.scriptBytes = scriptBytes;
         this.outpoint = outpoint;
         this.sequence = NO_SEQUENCE;
         this.parentTransaction = parentTransaction;
-        this.value = value;
         length = 40 + (scriptBytes == null ? 1 : VarInt.sizeOf(scriptBytes.length) + scriptBytes.length);
     }
 
@@ -95,7 +89,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
         scriptBytes = EMPTY_ARRAY;
         sequence = NO_SEQUENCE;
         this.parentTransaction = parentTransaction;
-        this.value = output.getValue();
+
         length = 41;
     }
 
@@ -106,7 +100,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
                             byte[] payload, int offset) throws ProtocolException {
         super(params, payload, offset);
         this.parentTransaction = parentTransaction;
-        this.value = null;
     }
 
     /**
@@ -126,7 +119,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
             throws ProtocolException {
         super(params, msg, offset, parentTransaction, parseLazy, parseRetain, UNKNOWN_LENGTH);
         this.parentTransaction = parentTransaction;
-        this.value = null;
     }
 
     protected void parseLite() throws ProtocolException {
@@ -261,14 +253,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
      */
     public Transaction getParentTransaction() {
         return parentTransaction;
-    }
-
-    /**
-     * @return Value of the output connected to this input, if known. Null if unknown.
-     */
-    @Nullable
-    public BigInteger getValue() {
-        return value;
     }
 
     /**
@@ -419,12 +403,10 @@ public class TransactionInput extends ChildMessage implements Serializable {
      * @throws VerificationException If the outpoint doesn't match the given output.
      */
     public void verify(TransactionOutput output) throws VerificationException {
-        if (output.parentTransaction != null) {
             if (!getOutpoint().getHash().equals(output.parentTransaction.getHash()))
                 throw new VerificationException("This input does not refer to the tx containing the output.");
             if (getOutpoint().getIndex() != output.getIndex())
                 throw new VerificationException("This input refers to a different output on the given tx.");
-        }
         Script pubKey = output.getScriptPubKey();
         int myIndex = parentTransaction.getInputs().indexOf(this);
         getScriptSig().correctlySpends(parentTransaction, myIndex, pubKey, true);
@@ -438,35 +420,5 @@ public class TransactionInput extends ChildMessage implements Serializable {
     @Nullable
     public TransactionOutput getConnectedOutput() {
         return getOutpoint().getConnectedOutput();
-    }
-
-    /** Returns a copy of the input detached from its containing transaction, if need be. */
-    public TransactionInput duplicateDetached() {
-        return new TransactionInput(params, null, bitcoinSerialize(), 0);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        TransactionInput input = (TransactionInput) o;
-
-        if (sequence != input.sequence) return false;
-        if (!outpoint.equals(input.outpoint)) return false;
-        if (!Arrays.equals(scriptBytes, input.scriptBytes)) return false;
-        if (scriptSig != null ? !scriptSig.equals(input.scriptSig) : input.scriptSig != null) return false;
-        if (parentTransaction != input.parentTransaction) return false;
-
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = (int) (sequence ^ (sequence >>> 32));
-        result = 31 * result + outpoint.hashCode();
-        result = 31 * result + (scriptBytes != null ? Arrays.hashCode(scriptBytes) : 0);
-        result = 31 * result + (scriptSig != null ? scriptSig.hashCode() : 0);
-        return result;
     }
 }

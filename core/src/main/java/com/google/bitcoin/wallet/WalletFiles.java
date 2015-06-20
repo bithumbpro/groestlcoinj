@@ -78,7 +78,6 @@ public class WalletFiles {
         this.executor = new ScheduledThreadPoolExecutor(1, builder.build());
         this.executor.setKeepAliveTime(5, TimeUnit.SECONDS);
         this.executor.allowCoreThreadTimeOut(true);
-        this.executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
         this.wallet = checkNotNull(wallet);
         // File must only be accessed from the auto-save executor from now on, to avoid simultaneous access.
         this.file = checkNotNull(file);
@@ -133,15 +132,5 @@ public class WalletFiles {
         if (savePending.getAndSet(true))
             return;   // Already pending.
         executor.schedule(saver, delay, delayTimeUnit);
-    }
-
-    /** Shut down auto-saving. */
-    public void shutdownAndWait() {
-        executor.shutdown();
-        try {
-            executor.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS); // forever
-        } catch (InterruptedException x) {
-            throw new RuntimeException(x);
-        }
     }
 }

@@ -22,8 +22,8 @@ import com.google.bitcoin.params.TestNet2Params;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.MemoryBlockStore;
-import com.google.bitcoin.testing.FakeTxBuilder;
 import com.google.bitcoin.utils.BriefLogFormatter;
+import com.google.bitcoin.utils.TestUtils;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.After;
 import org.junit.Before;
@@ -33,8 +33,8 @@ import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import static com.google.bitcoin.testing.FakeTxBuilder.createFakeBlock;
-import static com.google.bitcoin.testing.FakeTxBuilder.createFakeTx;
+import static com.google.bitcoin.utils.TestUtils.createFakeBlock;
+import static com.google.bitcoin.utils.TestUtils.createFakeTx;
 import static org.junit.Assert.*;
 
 // Handling of chain splits/reorgs are in ChainSplitTests.
@@ -51,8 +51,8 @@ public class BlockChainTest {
     private Transaction coinbaseTransaction;
 
     private static class TweakableTestNet2Params extends TestNet2Params {
-        public void setMaxTarget(BigInteger limit) {
-            maxTarget = limit;
+        public void setProofOfWorkLimit(BigInteger limit) {
+            proofOfWorkLimit = limit;
         }
     }
     private static final TweakableTestNet2Params testNet = new TweakableTestNet2Params();
@@ -79,12 +79,12 @@ public class BlockChainTest {
                 }
             }
         };
-        wallet.freshReceiveKey();
+        wallet.addKey(new ECKey());
 
         resetBlockStore();
         chain = new BlockChain(unitTestParams, wallet, blockStore);
 
-        coinbaseTo = wallet.currentReceiveKey().toAddress(unitTestParams);
+        coinbaseTo = wallet.getKeys().get(0).toAddress(unitTestParams);
     }
 
     @After
@@ -124,7 +124,7 @@ public class BlockChainTest {
         // Quick check that we can actually receive coins.
         Transaction tx1 = createFakeTx(unitTestParams,
                                        Utils.toNanoCoins(1, 0),
-                                       wallet.currentReceiveKey().toAddress(unitTestParams));
+                                       wallet.getKeys().get(0).toAddress(unitTestParams));
         Block b1 = createFakeBlock(blockStore, tx1).block;
         chain.add(b1);
         assertTrue(wallet.getBalance().signum() > 0);
@@ -136,7 +136,7 @@ public class BlockChainTest {
         // there isn't any such tx present (as an optimization).
         Transaction tx1 = createFakeTx(unitTestParams,
                                        Utils.toNanoCoins(1, 0),
-                                       wallet.currentReceiveKey().toAddress(unitTestParams));
+                                       wallet.getKeys().get(0).toAddress(unitTestParams));
         Block b1 = createFakeBlock(blockStore, tx1).block;
         chain.add(b1);
         resetBlockStore();
@@ -181,7 +181,7 @@ public class BlockChainTest {
         Block prev = unitTestParams.getGenesisBlock();
         Utils.setMockClock(System.currentTimeMillis()/1000);
         for (int i = 0; i < unitTestParams.getInterval() - 1; i++) {
-            Block newBlock = prev.createNextBlock(coinbaseTo, Utils.currentTimeSeconds());
+            Block newBlock = prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000);
             assertTrue(chain.add(newBlock));
             prev = newBlock;
             // The fake chain should seem to be "fast" for the purposes of difficulty calculations.
@@ -189,13 +189,13 @@ public class BlockChainTest {
         }
         // Now add another block that has no difficulty adjustment, it should be rejected.
         try {
-            chain.add(prev.createNextBlock(coinbaseTo, Utils.currentTimeSeconds()));
+            chain.add(prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000));
             fail();
         } catch (VerificationException e) {
         }
         // Create a new block with the right difficulty target given our blistering speed relative to the huge amount
         // of time it's supposed to take (set in the unit test network parameters).
-        Block b = prev.createNextBlock(coinbaseTo, Utils.currentTimeSeconds());
+        Block b = prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000);
         b.setDifficultyTarget(0x201fFFFFL);
         b.solve();
         assertTrue(chain.add(b));
@@ -228,8 +228,9 @@ public class BlockChainTest {
         }
 
         // Accept any level of difficulty now.
-        BigInteger oldVal = testNet.getMaxTarget();
-        testNet.setMaxTarget(new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16));
+        BigInteger oldVal = testNet.getProofOfWorkLimit();
+        testNet.setProofOfWorkLimit(new BigInteger
+                ("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16));
         try {
             testNetChain.add(bad);
             // We should not get here as the difficulty target should not be changing at this point.
@@ -237,7 +238,7 @@ public class BlockChainTest {
         } catch (VerificationException e) {
             assertTrue(e.getMessage(), e.getCause().getMessage().contains("Unexpected change in difficulty"));
         }
-        testNet.setMaxTarget(oldVal);
+        testNet.setProofOfWorkLimit(oldVal);
 
         // TODO: Test difficulty change is not out of range when a transition period becomes valid.
     }
@@ -267,10 +268,11 @@ public class BlockChainTest {
         // considered relevant.
         Address somebodyElse = new ECKey().toAddress(unitTestParams);
         Block b1 = unitTestParams.getGenesisBlock().createNextBlock(somebodyElse);
-        ECKey key = wallet.freshReceiveKey();
+        ECKey key = new ECKey();
+        wallet.addKey(key);
         Address addr = key.toAddress(unitTestParams);
         // Create a tx that gives us some coins, and another that spends it to someone else in the same block.
-        Transaction t1 = FakeTxBuilder.createFakeTx(unitTestParams, Utils.toNanoCoins(1, 0), addr);
+        Transaction t1 = TestUtils.createFakeTx(unitTestParams, Utils.toNanoCoins(1, 0), addr);
         Transaction t2 = new Transaction(unitTestParams);
         t2.addInput(t1.getOutputs().get(0));
         t2.addOutput(Utils.toNanoCoins(2, 0), somebodyElse);
@@ -287,13 +289,14 @@ public class BlockChainTest {
 
         // Create a second wallet to receive the coinbase spend.
         Wallet wallet2 = new Wallet(unitTestParams);
-        ECKey receiveKey = wallet2.freshReceiveKey();
+        ECKey receiveKey = new ECKey();
+        wallet2.addKey(receiveKey);
         chain.addWallet(wallet2);
 
         Address addressToSendTo = receiveKey.toAddress(unitTestParams);
 
         // Create a block, sending the coinbase to the coinbaseTo address (which is in the wallet).
-        Block b1 = unitTestParams.getGenesisBlock().createNextBlockWithCoinbase(wallet.currentReceiveKey().getPubKey());
+        Block b1 = unitTestParams.getGenesisBlock().createNextBlockWithCoinbase(wallet.getKeys().get(0).getPubKey());
         chain.add(b1);
 
         // Check a transaction has been received.

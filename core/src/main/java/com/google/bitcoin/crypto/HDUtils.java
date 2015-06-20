@@ -17,23 +17,21 @@
 package com.google.bitcoin.crypto;
 
 import com.google.bitcoin.core.ECKey;
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import org.spongycastle.crypto.digests.SHA512Digest;
 import org.spongycastle.crypto.macs.HMac;
 import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.math.ec.ECPoint;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Static utilities used in BIP 32 Hierarchical Deterministic Wallets (HDW).
  */
 public final class HDUtils {
-    private static final Joiner PATH_JOINER = Joiner.on("/");
+
+    private HDUtils() { }
 
     static HMac createHmacSha512Digest(byte[] key) {
         SHA512Digest digest = new SHA512Digest();
@@ -54,8 +52,16 @@ public final class HDUtils {
         return hmacSha512(createHmacSha512Digest(key), data);
     }
 
+    static ECPoint compressedCopy(ECPoint pubKPoint) {
+        return ECKey.CURVE.getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), true);
+    }
+
+    static ECPoint toUncompressed(ECPoint pubKPoint) {
+        return ECKey.CURVE.getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), false);
+    }
+
     static byte[] toCompressed(byte[] uncompressedPoint) {
-        return ECKey.CURVE.getCurve().decodePoint(uncompressedPoint).getEncoded(true);
+        return compressedCopy(ECKey.CURVE.getCurve().decodePoint(uncompressedPoint)).getEncoded();
     }
 
     static byte[] longTo4ByteArray(long n) {
@@ -64,11 +70,11 @@ public final class HDUtils {
         return bytes;
     }
 
-    public static ImmutableList<ChildNumber> append(ImmutableList<ChildNumber> path, ChildNumber childNumber) {
-        return ImmutableList.<ChildNumber>builder().addAll(path).add(childNumber).build();
+    static byte[] getBytes(ECPoint pubKPoint) {
+        return compressedCopy(pubKPoint).getEncoded();
     }
 
-    public static String formatPath(List<ChildNumber> path) {
-        return PATH_JOINER.join(Iterables.concat(Collections.singleton("M"), path));
+    static ImmutableList<ChildNumber> append(ImmutableList<ChildNumber> path, ChildNumber childNumber) {
+        return ImmutableList.<ChildNumber>builder().addAll(path).add(childNumber).build();
     }
 }

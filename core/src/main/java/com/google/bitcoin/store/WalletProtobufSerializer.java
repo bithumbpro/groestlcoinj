@@ -19,30 +19,30 @@ package com.google.bitcoin.store;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
 import com.google.bitcoin.crypto.KeyCrypter;
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.bitcoin.script.Script;
-import com.google.bitcoin.wallet.KeyChainGroup;
 import com.google.bitcoin.wallet.WalletTransaction;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.TextFormat;
-import com.google.protobuf.WireFormat;
-
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -74,24 +74,8 @@ public class WalletProtobufSerializer {
 
     private boolean requireMandatoryExtensions = true;
 
-    public interface WalletFactory {
-        Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup);
-    }
-
-    private final WalletFactory factory;
-
     public WalletProtobufSerializer() {
-        this(new WalletFactory() {
-            @Override
-            public Wallet create(NetworkParameters params, KeyChainGroup keyChainGroup) {
-                return new Wallet(params, keyChainGroup);
-            }
-        });
-    }
-
-    public WalletProtobufSerializer(WalletFactory factory) {
         txMap = new HashMap<ByteString, Transaction>();
-        this.factory = factory;
     }
 
     /**
@@ -141,7 +125,40 @@ public class WalletProtobufSerializer {
             walletBuilder.addTransaction(txProto);
         }
 
-        walletBuilder.addAllKey(wallet.serializeKeychainToProtobuf());
+        for (ECKey key : wallet.getKeys()) {
+            Protos.Key.Builder keyBuilder = Protos.Key.newBuilder().setCreationTimestamp(key.getCreationTimeSeconds() * 1000)
+                                                         // .setLabel() TODO
+                                                            .setType(Protos.Key.Type.ORIGINAL);
+            if (key.getPrivKeyBytes() != null)
+                keyBuilder.setPrivateKey(ByteString.copyFrom(key.getPrivKeyBytes()));
+
+            EncryptedPrivateKey encryptedPrivateKey = key.getEncryptedPrivateKey();
+            if (encryptedPrivateKey != null) {
+                // Key is encrypted.
+                Protos.EncryptedPrivateKey.Builder encryptedKeyBuilder = Protos.EncryptedPrivateKey.newBuilder()
+                    .setEncryptedPrivateKey(ByteString.copyFrom(encryptedPrivateKey.getEncryptedBytes()))
+                    .setInitialisationVector(ByteString.copyFrom(encryptedPrivateKey.getInitialisationVector()));
+
+                if (key.getKeyCrypter() == null) {
+                    throw new IllegalStateException("The encrypted key " + key.toString() + " has no KeyCrypter.");
+                } else {
+                    // If it is a Scrypt + AES encrypted key, set the persisted key type.
+                    if (key.getKeyCrypter().getUnderstoodEncryptionType() == Protos.Wallet.EncryptionType.ENCRYPTED_SCRYPT_AES) {
+                        keyBuilder.setType(Protos.Key.Type.ENCRYPTED_SCRYPT_AES);
+                    } else {
+                        throw new IllegalArgumentException("The key " + key.toString() + " is encrypted with a KeyCrypter of type " + key.getKeyCrypter().getUnderstoodEncryptionType() +
+                                ". This WalletProtobufSerialiser does not understand that type of encryption.");
+                    }
+                }
+                keyBuilder.setEncryptedPrivateKey(encryptedKeyBuilder);
+            }
+
+            // We serialize the public key even if the private key is present for speed reasons: we don't want to do
+            // lots of slow EC math to load the wallet, we prefer to store the redundant data instead. It matters more
+            // on mobile platforms.
+            keyBuilder.setPublicKey(ByteString.copyFrom(key.getPubKey()));
+            walletBuilder.addKey(keyBuilder);
+        }
 
         for (Script script : wallet.getWatchedScripts()) {
             Protos.Script protoScript =
@@ -186,11 +203,6 @@ public class WalletProtobufSerializer {
 
         populateExtensions(wallet, walletBuilder);
 
-        for (Map.Entry<String, ByteString> entry : wallet.getTags().entrySet()) {
-            Protos.Tag.Builder tag = Protos.Tag.newBuilder().setTag(entry.getKey()).setData(entry.getValue());
-            walletBuilder.addTags(tag);
-        }
-
         // Populate the wallet version.
         walletBuilder.setVersion(wallet.getVersion());
 
@@ -229,10 +241,9 @@ public class WalletProtobufSerializer {
                 .setScriptBytes(ByteString.copyFrom(input.getScriptBytes()))
                 .setTransactionOutPointHash(hashToByteString(input.getOutpoint().getHash()))
                 .setTransactionOutPointIndex((int) input.getOutpoint().getIndex());
-            if (input.hasSequence())
+            if (input.hasSequence()) {
                 inputBuilder.setSequence((int) input.getSequenceNumber());
-            if (input.getValue() != null)
-                inputBuilder.setValue(input.getValue().longValue());
+            }
             txBuilder.addTransactionInput(inputBuilder);
         }
         
@@ -359,7 +370,9 @@ public class WalletProtobufSerializer {
             NetworkParameters params = NetworkParameters.fromID(paramsID);
             if (params == null)
                 throw new UnreadableWalletException("Unknown network parameters ID " + paramsID);
-            return readWallet(params, null, walletProto);
+            Wallet wallet = new Wallet(params);
+            readWallet(walletProto, wallet);
+            return wallet;
         } catch (IOException e) {
             throw new UnreadableWalletException("Could not parse input stream to protobuf", e);
         }
@@ -376,21 +389,45 @@ public class WalletProtobufSerializer {
      *
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
-    public Wallet readWallet(NetworkParameters params, @Nullable WalletExtension[] extensions,
-                             Protos.Wallet walletProto) throws UnreadableWalletException {
-        if (walletProto.getVersion() > 1)
-            throw new UnreadableWalletException.FutureVersion();
-
+    public void readWallet(Protos.Wallet walletProto, Wallet wallet) throws UnreadableWalletException {
         // Read the scrypt parameters that specify how encryption and decryption is performed.
-        KeyChainGroup chain;
         if (walletProto.hasEncryptionParameters()) {
             Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
-            final KeyCrypterScrypt keyCrypter = new KeyCrypterScrypt(encryptionParameters);
-            chain = KeyChainGroup.fromProtobufEncrypted(walletProto.getKeyList(), keyCrypter);
-        } else {
-            chain = KeyChainGroup.fromProtobufUnencrypted(walletProto.getKeyList());
+            wallet.setKeyCrypter(new KeyCrypterScrypt(encryptionParameters));
         }
-        Wallet wallet = factory.create(params, chain);
+
+        if (walletProto.hasDescription()) {
+            wallet.setDescription(walletProto.getDescription());
+        }
+
+        // Read all keys
+        for (Protos.Key keyProto : walletProto.getKeyList()) {
+            if (!(keyProto.getType() == Protos.Key.Type.ORIGINAL || keyProto.getType() == Protos.Key.Type.ENCRYPTED_SCRYPT_AES)) {
+                throw new UnreadableWalletException("Unknown key type in wallet, type = " + keyProto.getType());
+            }
+
+            byte[] privKey = keyProto.hasPrivateKey() ? keyProto.getPrivateKey().toByteArray() : null;
+            EncryptedPrivateKey encryptedPrivateKey = null;
+            if (keyProto.hasEncryptedPrivateKey()) {
+                Protos.EncryptedPrivateKey encryptedPrivateKeyProto = keyProto.getEncryptedPrivateKey();
+                encryptedPrivateKey = new EncryptedPrivateKey(encryptedPrivateKeyProto.getInitialisationVector().toByteArray(),
+                        encryptedPrivateKeyProto.getEncryptedPrivateKey().toByteArray());
+            }
+
+            byte[] pubKey = keyProto.hasPublicKey() ? keyProto.getPublicKey().toByteArray() : null;
+
+            ECKey ecKey;
+            final KeyCrypter keyCrypter = wallet.getKeyCrypter();
+            if (keyCrypter != null && keyCrypter.getUnderstoodEncryptionType() != EncryptionType.UNENCRYPTED) {
+                // If the key is encrypted construct an ECKey using the encrypted private key bytes.
+                ecKey = new ECKey(encryptedPrivateKey, pubKey, keyCrypter);
+        } else {
+                // Construct an unencrypted private key.
+                ecKey = new ECKey(privKey, pubKey);
+            }
+            ecKey.setCreationTimeSeconds((keyProto.getCreationTimestamp() + 500) / 1000);
+            wallet.addKey(ecKey);
+        }
 
         List<Script> scripts = Lists.newArrayList();
         for (Protos.Script protoScript : walletProto.getWatchedScriptList()) {
@@ -405,10 +442,6 @@ public class WalletProtobufSerializer {
         }
 
         wallet.addWatchedScripts(scripts);
-
-        if (walletProto.hasDescription()) {
-            wallet.setDescription(walletProto.getDescription());
-        }
 
         // Read all transactions and insert into the txMap.
         for (Protos.Transaction txProto : walletProto.getTransactionList()) {
@@ -439,11 +472,7 @@ public class WalletProtobufSerializer {
             wallet.setKeyRotationTime(new Date(walletProto.getKeyRotationTime() * 1000));
         }
 
-        loadExtensions(wallet, extensions != null ? extensions : new WalletExtension[0], walletProto);
-
-        for (Protos.Tag tag : walletProto.getTagsList()) {
-            wallet.setTag(tag.getTag(), tag.getData());
-        }
+        loadExtensions(wallet, walletProto);
 
         if (walletProto.hasVersion()) {
             wallet.setVersion(walletProto.getVersion());
@@ -451,17 +480,10 @@ public class WalletProtobufSerializer {
 
         // Make sure the object can be re-used to read another wallet without corruption.
         txMap.clear();
-
-        return wallet;
     }
 
-    private void loadExtensions(Wallet wallet, WalletExtension[] extensionsList, Protos.Wallet walletProto) throws UnreadableWalletException {
-        final Map<String, WalletExtension> extensions = new HashMap<String, WalletExtension>();
-        for (WalletExtension e : extensionsList)
-            extensions.put(e.getWalletExtensionID(), e);
-        // The Wallet object, if subclassed, might have added some extensions to itself already. In that case, don't
-        // expect them to be passed in, just fetch them here and don't re-add.
-        extensions.putAll(wallet.getExtensions());
+    private void loadExtensions(Wallet wallet, Protos.Wallet walletProto) throws UnreadableWalletException {
+        final Map<String, WalletExtension> extensions = wallet.getExtensions();
         for (Protos.Extension extProto : walletProto.getExtensionList()) {
             String id = extProto.getId();
             WalletExtension extension = extensions.get(id);
@@ -476,7 +498,6 @@ public class WalletProtobufSerializer {
                 log.info("Loading wallet extension {}", id);
                 try {
                     extension.deserializeWalletExtension(wallet, extProto.getData().toByteArray());
-                    wallet.addOrGetExistingExtension(extension);
                 } catch (Exception e) {
                     if (extProto.getMandatory() && requireMandatoryExtensions)
                         throw new UnreadableWalletException("Could not parse mandatory extension in wallet: " + id);
@@ -509,16 +530,15 @@ public class WalletProtobufSerializer {
             tx.addOutput(output);
         }
 
-        for (Protos.TransactionInput inputProto : txProto.getTransactionInputList()) {
-            byte[] scriptBytes = inputProto.getScriptBytes().toByteArray();
+        for (Protos.TransactionInput transactionInput : txProto.getTransactionInputList()) {
+            byte[] scriptBytes = transactionInput.getScriptBytes().toByteArray();
             TransactionOutPoint outpoint = new TransactionOutPoint(params,
-                    inputProto.getTransactionOutPointIndex() & 0xFFFFFFFFL,
-                    byteStringToHash(inputProto.getTransactionOutPointHash())
+                    transactionInput.getTransactionOutPointIndex() & 0xFFFFFFFFL,
+                    byteStringToHash(transactionInput.getTransactionOutPointHash())
             );
-            BigInteger value = inputProto.hasValue() ? BigInteger.valueOf(inputProto.getValue()) : null;
-            TransactionInput input = new TransactionInput(params, tx, scriptBytes, outpoint, value);
-            if (inputProto.hasSequence()) {
-                input.setSequenceNumber(inputProto.getSequence());
+            TransactionInput input = new TransactionInput(params, tx, scriptBytes, outpoint);
+            if (transactionInput.hasSequence()) {
+                input.setSequenceNumber(transactionInput.getSequence());
             }
             tx.addInput(input);
         }
@@ -673,27 +693,6 @@ public class WalletProtobufSerializer {
             case SOURCE_UNKNOWN:
                 // Fall through.
             default: confidence.setSource(TransactionConfidence.Source.UNKNOWN); break;
-        }
-    }
-
-    /**
-     * Cheap test to see if input stream is a wallet. This checks for a magic value at the beginning of the stream.
-     * 
-     * @param is
-     *            input stream to test
-     * @return true if input stream is a wallet
-     */
-    public static boolean isWallet(InputStream is) {
-        try {
-            final CodedInputStream cis = CodedInputStream.newInstance(is);
-            final int tag = cis.readTag();
-            final int field = WireFormat.getTagFieldNumber(tag);
-            if (field != 1) // network_identifier
-                return false;
-            final String network = cis.readString();
-            return NetworkParameters.fromID(network) != null;
-        } catch (IOException x) {
-            return false;
         }
     }
 }

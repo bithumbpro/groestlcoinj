@@ -35,15 +35,14 @@ public class VersionedChecksummedBytes {
     protected byte[] bytes;
 
     protected VersionedChecksummedBytes(String encoded) throws AddressFormatException {
-        byte[] versionAndDataBytes = Base58.decodeChecked(encoded);
-        byte versionByte = versionAndDataBytes[0];
-        version = versionByte & 0xFF;
-        bytes = new byte[versionAndDataBytes.length - 1];
-        System.arraycopy(versionAndDataBytes, 1, bytes, 0, versionAndDataBytes.length - 1);
+        byte[] tmp = Base58.decodeChecked(encoded);
+        version = tmp[0] & 0xFF;
+        bytes = new byte[tmp.length - 1];
+        System.arraycopy(tmp, 1, bytes, 0, tmp.length - 1);
     }
 
     protected VersionedChecksummedBytes(int version, byte[] bytes) {
-        checkArgument(version >= 0 && version < 256);
+        checkArgument(version < 256 && version >= 0);
         this.version = version;
         this.bytes = bytes;
     }
@@ -61,7 +60,6 @@ public class VersionedChecksummedBytes {
         return Base58.encode(addressBytes);
     }
 
-    // TODO: shouldn't hashCode be also based on the version?
     @Override
     public int hashCode() {
         return Arrays.hashCode(bytes);
@@ -69,10 +67,9 @@ public class VersionedChecksummedBytes {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        VersionedChecksummedBytes other = (VersionedChecksummedBytes) o;
-        return Arrays.equals(bytes, other.bytes);
+        if (!(o instanceof VersionedChecksummedBytes)) return false;
+        VersionedChecksummedBytes vcb = (VersionedChecksummedBytes) o;
+        return Arrays.equals(vcb.bytes, bytes);
     }
 
     /**

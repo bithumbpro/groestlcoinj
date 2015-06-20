@@ -113,7 +113,7 @@ public class PeerAddress extends ChildMessage {
             //TODO this appears to be dynamic because the client only ever sends out it's own address
             //so assumes itself to be up.  For a fuller implementation this needs to be dynamic only if
             //the address refers to this client.
-            int secs = (int) (Utils.currentTimeSeconds());
+            int secs = (int) (Utils.currentTimeMillis() / 1000);
             uint32ToByteStreamLE(secs, stream);
         }
         uint64ToByteStreamLE(services, stream);  // nServices.
@@ -246,8 +246,7 @@ public class PeerAddress extends ChildMessage {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof PeerAddress)) return false;
         PeerAddress other = (PeerAddress) o;
         return other.addr.equals(addr) &&
                 other.port == port &&

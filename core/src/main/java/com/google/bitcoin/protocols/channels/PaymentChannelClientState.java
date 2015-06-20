@@ -161,6 +161,8 @@ public class PaymentChannelClientState {
         this.wallet = checkNotNull(wallet);
         initWalletListeners();
         this.serverMultisigKey = checkNotNull(serverMultisigKey);
+        if (!myKey.isPubKeyCanonical() || !serverMultisigKey.isPubKeyCanonical())
+            throw new VerificationException("Pubkey was not canonical (ie non-standard)");
         this.myKey = checkNotNull(myKey);
         this.valueToMe = this.totalValue = checkNotNull(value);
         this.expiryTime = expiryTimeInSeconds;
@@ -251,7 +253,6 @@ public class PaymentChannelClientState {
         Wallet.SendRequest req = Wallet.SendRequest.forTx(template);
         req.coinSelector = AllowUnconfirmedCoinSelector.get();
         editContractSendRequest(req);
-        req.shuffleOutputs = false;   // TODO: Fix things so shuffling is usable.
         wallet.completeTx(req);
         BigInteger multisigFee = req.fee;
         multisigContract = req.tx;
@@ -363,7 +364,7 @@ public class PaymentChannelClientState {
      * storage and throwing an {@link IllegalStateException} if it is.
      */
     public synchronized void checkNotExpired() {
-        if (Utils.currentTimeSeconds() > expiryTime) {
+        if (Utils.currentTimeMillis()/1000 > expiryTime) {
             state = State.EXPIRED;
             disconnectFromChannel();
             throw new IllegalStateException("Channel expired");

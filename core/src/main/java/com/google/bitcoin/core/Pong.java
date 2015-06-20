@@ -51,8 +51,7 @@ public class Pong extends Message {
     protected void parseLite() {
     }
 
-    /** Returns the nonce sent by the remote peer. */
-    public long getNonce() {
+    long getNonce() {
         return nonce;
     }
 }

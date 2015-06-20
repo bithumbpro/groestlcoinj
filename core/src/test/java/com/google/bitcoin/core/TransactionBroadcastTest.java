@@ -1,6 +1,5 @@
 /**
  * Copyright 2013 Google Inc.
- * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +17,8 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.params.UnitTestParams;
-import com.google.bitcoin.testing.FakeTxBuilder;
-import com.google.bitcoin.testing.InboundMessageQueuer;
-import com.google.bitcoin.testing.TestWithPeerGroup;
+import com.google.bitcoin.store.MemoryBlockStore;
+import com.google.bitcoin.utils.TestUtils;
 import com.google.bitcoin.utils.Threading;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.After;
@@ -35,6 +33,7 @@ import java.util.Random;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 @RunWith(value = Parameterized.class)
 public class TransactionBroadcastTest extends TestWithPeerGroup {
@@ -53,19 +52,18 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
     @Override
     @Before
     public void setUp() throws Exception {
-        Utils.setMockClock(); // Use mock clock
-        super.setUp();
+        super.setUp(new MemoryBlockStore(UnitTestParams.get()));
+        peerGroup.addWallet(wallet);
         // Fix the random permutation that TransactionBroadcast uses to shuffle the peers.
         TransactionBroadcast.random = new Random(0);
         peerGroup.setMinBroadcastConnections(2);
-        peerGroup.startAsync();
-        peerGroup.awaitRunning();
+        peerGroup.startAndWait();
     }
 
-    @Override
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
         super.tearDown();
+        peerGroup.stopAndWait();
     }
 
     @Test
@@ -104,7 +102,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         connectPeer(2);
 
         // Send ourselves a bit of money.
-        Block b1 = FakeTxBuilder.makeSolvedTestBlock(blockStore, address);
+        Block b1 = TestUtils.makeSolvedTestBlock(blockStore, address);
         inbound(p1, b1);
         assertNull(outbound(p1));
         assertEquals(Utils.toNanoCoins(50, 0), wallet.getBalance());
@@ -113,12 +111,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         Address dest = new ECKey().toAddress(params);
         Wallet.SendResult sendResult = wallet.sendCoins(peerGroup, dest, Utils.toNanoCoins(1, 0));
         assertFalse(sendResult.broadcastComplete.isDone());
-        Transaction t1;
-        {
-            Message m;
-            while (!((m = outbound(p1)) instanceof Transaction));
-            t1 = (Transaction) m;
-        }
+        Transaction t1 = (Transaction) outbound(p1);
         assertFalse(sendResult.broadcastComplete.isDone());
 
         // p1 eats it :( A bit later the PeerGroup is taken down.
@@ -143,7 +136,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         InboundMessageQueuer p2 = connectPeer(2);
 
         // Send ourselves a bit of money.
-        Block b1 = FakeTxBuilder.makeSolvedTestBlock(blockStore, address);
+        Block b1 = TestUtils.makeSolvedTestBlock(blockStore, address);
         inbound(p1, b1);
         pingAndWait(p1);
         assertNull(outbound(p1));
@@ -167,15 +160,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         assertEquals(transactions[0], sendResult.tx);
         assertEquals(0, transactions[0].getConfidence().numBroadcastPeers());
         transactions[0] = null;
-        Transaction t1;
-        {
-            peerGroup.waitForJobQueue();
-            Message m = outbound(p1);
-            // Hack: bloom filters are recalculated asynchronously to sending transactions to avoid lock
-            // inversion, so we might or might not get the filter/mempool message first or second.
-            while (!(m instanceof Transaction)) m = outbound(p1);
-            t1 = (Transaction) m;
-        }
+        Transaction t1 = (Transaction) outbound(p1);
         assertNotNull(t1);
         // 49 BTC in change.
         assertEquals(Utils.toNanoCoins(49, 0), t1.getValueSentToMe(wallet));
@@ -189,7 +174,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         assertEquals(transactions[0], sendResult.tx);
         assertEquals(1, transactions[0].getConfidence().numBroadcastPeers());
         // Confirm it.
-        Block b2 = FakeTxBuilder.createFakeBlock(blockStore, t1).block;
+        Block b2 = TestUtils.createFakeBlock(blockStore, t1).block;
         inbound(p1, b2);
         pingAndWait(p1);
         assertNull(outbound(p1));
@@ -202,7 +187,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         assertNull(outbound(p1));  // Nothing sent.
         // Add the wallet to the peer group (simulate initialization). Transactions should be announced.
         peerGroup.addWallet(wallet);
-        // Transaction announced to the first peer. No extra Bloom filter because no change address was needed.
+        // Transaction announced to the first peer.
         assertEquals(t3.getHash(), ((Transaction) outbound(p1)).getHash());
     }
 }

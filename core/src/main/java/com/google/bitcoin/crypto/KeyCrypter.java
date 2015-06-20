@@ -15,10 +15,10 @@
  */
 package com.google.bitcoin.crypto;
 
+import java.io.Serializable;
+
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
 import org.spongycastle.crypto.params.KeyParameter;
-
-import java.io.Serializable;
 
 /**
  * <p>A KeyCrypter can be used to encrypt and decrypt a message. The sequence of events to encrypt and then decrypt
@@ -54,7 +54,7 @@ public interface KeyCrypter extends Serializable {
      *
      * @throws KeyCrypterException if decryption was unsuccessful.
      */
-    public byte[] decrypt(EncryptedData encryptedBytesToDecode, KeyParameter aesKey) throws KeyCrypterException;
+    public byte[] decrypt(EncryptedPrivateKey encryptedBytesToDecode, KeyParameter aesKey) throws KeyCrypterException;
 
     /**
      * Encrypt the supplied bytes, converting them into ciphertext.
@@ -62,5 +62,5 @@ public interface KeyCrypter extends Serializable {
      * @return encryptedPrivateKey An encryptedPrivateKey containing the encrypted bytes and an initialisation vector.
      * @throws KeyCrypterException if encryption was unsuccessful
      */
-    public EncryptedData encrypt(byte[] plainBytes, KeyParameter aesKey) throws KeyCrypterException;
+    public EncryptedPrivateKey encrypt(byte[] plainBytes, KeyParameter aesKey) throws KeyCrypterException;
 }

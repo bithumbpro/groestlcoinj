@@ -28,7 +28,6 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.math.BigInteger;
-import java.util.Arrays;
 
 import static com.google.common.base.Preconditions.*;
 
@@ -55,8 +54,8 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     private boolean availableForSpending;
     @Nullable private TransactionInput spentBy;
 
-    // A reference to the transaction which holds this output, if any.
-    @Nullable Transaction parentTransaction;
+    // A reference to the transaction which holds this output.
+    Transaction parentTransaction;
     private transient int scriptLen;
 
     /**
@@ -81,7 +80,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
      * the cached bytes may be repopulated and retained if the message is serialized again in the future.
      * @throws ProtocolException
      */
-    public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, byte[] msg, int offset,
+    public TransactionOutput(NetworkParameters params, Transaction parent, byte[] msg, int offset,
                              boolean parseLazy, boolean parseRetain) throws ProtocolException {
         super(params, msg, offset, parent, parseLazy, parseRetain, UNKNOWN_LENGTH);
         parentTransaction = parent;
@@ -93,7 +92,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
      * something like {@link Utils#toNanoCoins(int, int)}. Typically you would use
      * {@link Transaction#addOutput(java.math.BigInteger, Address)} instead of creating a TransactionOutput directly.
      */
-    public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, BigInteger value, Address to) {
+    public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, Address to) {
         this(params, parent, value, ScriptBuilder.createOutputScript(to).getProgram());
     }
 
@@ -102,11 +101,11 @@ public class TransactionOutput extends ChildMessage implements Serializable {
      * amount should be created with something like {@link Utils#toNanoCoins(int, int)}. Typically you would use
      * {@link Transaction#addOutput(java.math.BigInteger, ECKey)} instead of creating an output directly.
      */
-    public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, BigInteger value, ECKey to) {
+    public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, ECKey to) {
         this(params, parent, value, ScriptBuilder.createOutputScript(to).getProgram());
     }
 
-    public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, BigInteger value, byte[] scriptBytes) {
+    public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, byte[] scriptBytes) {
         super(params);
         // Negative values obviously make no sense, except for -1 which is used as a sentinel value when calculating
         // SIGHASH_SINGLE signatures, so unfortunately we have to allow that here.
@@ -175,7 +174,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     }
 
     int getIndex() {
-        checkNotNull(parentTransaction, "This output is not attached to a parent transaction.");
+        checkNotNull(parentTransaction);
         for (int i = 0; i < parentTransaction.getOutputs().size(); i++) {
             if (parentTransaction.getOutputs().get(i) == this)
                 return i;
@@ -300,23 +299,10 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     /**
      * Returns a human readable debug string.
      */
-    @Override
     public String toString() {
         try {
-            Script script = getScriptPubKey();
-            StringBuilder buf = new StringBuilder("TxOut of ");
-            buf.append(Utils.bitcoinValueToFriendlyString(value));
-            if (script.isSentToAddress() || script.isPayToScriptHash())
-                buf.append(" to ").append(script.getToAddress(params));
-            else if (script.isSentToRawPubKey())
-                buf.append(" to pubkey ").append(Utils.bytesToHexString(script.getPubKey()));
-            else if (script.isSentToMultiSig())
-                buf.append(" to multisig");
-            else
-                buf.append(" (unknown type)");
-            buf.append(" script:");
-            buf.append(script);
-            return buf.toString();
+            return "TxOut of " + Utils.bitcoinValueToFriendlyString(value) + " to " +
+                    getScriptPubKey().getToAddress(params).toString() + " script:" + getScriptPubKey().toString();
         } catch (ScriptException e) {
             throw new RuntimeException(e);
         }
@@ -345,39 +331,5 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     private void writeObject(ObjectOutputStream out) throws IOException {
         maybeParse();
         out.defaultWriteObject();
-    }
-
-    /**
-     * Returns a new {@link TransactionOutPoint}, which is essentially a structure pointing to this output.
-     * Requires that this output is not detached.
-     */
-    public TransactionOutPoint getOutPointFor() {
-        return new TransactionOutPoint(params, getIndex(), getParentTransaction());
-    }
-
-    /** Returns a copy of the output detached from its containing transaction, if need be. */
-    public TransactionOutput duplicateDetached() {
-        return new TransactionOutput(params, null, value, org.spongycastle.util.Arrays.clone(scriptBytes));
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        TransactionOutput other = (TransactionOutput) o;
-
-        if (!Arrays.equals(scriptBytes, other.scriptBytes)) return false;
-        if (value != null ? !value.equals(other.value) : other.value != null) return false;
-        if (parentTransaction != null && parentTransaction != other.parentTransaction) return false;
-
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = value != null ? value.hashCode() : 0;
-        result = 31 * result + (scriptBytes != null ? Arrays.hashCode(scriptBytes) : 0);
-        return result;
     }
 }

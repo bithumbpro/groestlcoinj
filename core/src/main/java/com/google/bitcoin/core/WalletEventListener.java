@@ -17,7 +17,6 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.script.Script;
-import com.google.bitcoin.wallet.KeyChainEventListener;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -26,7 +25,7 @@ import java.util.List;
  * <p>Implementors are called when the contents of the wallet changes, for instance due to receiving/sending money
  * or a block chain re-organize. It may be convenient to derive from {@link AbstractWalletEventListener} instead.</p>
  */
-public interface WalletEventListener extends KeyChainEventListener {
+public interface WalletEventListener {
     /**
      * This is called when a transaction is seen that sends coins <b>to</b> this wallet, either because it
      * was broadcast across the network or because a block was received. If a transaction is seen when it was broadcast,
@@ -116,6 +115,12 @@ public interface WalletEventListener extends KeyChainEventListener {
      * rather than one per transaction per block. Note that this is <b>not</b> called when a key is added. </p>
      */
     void onWalletChanged(Wallet wallet);
+
+    /**
+     * Called whenever a new key is added to the wallet, whether that be via {@link Wallet#addKeys(java.util.List)}
+     * or due to some other automatic derivation.
+     */
+    void onKeysAdded(Wallet wallet, List<ECKey> keys);
 
     /** Called whenever a new watched script is added to the wallet. */
     void onScriptsAdded(Wallet wallet, List<Script> scripts);

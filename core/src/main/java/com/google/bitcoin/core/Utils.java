@@ -18,9 +18,6 @@
 package com.google.bitcoin.core;
 
 import com.google.common.base.Charsets;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Ordering;
-import com.google.common.primitives.Ints;
 import com.google.common.primitives.UnsignedLongs;
 import org.spongycastle.crypto.digests.RIPEMD160Digest;
 import org.spongycastle.util.encoders.Hex;
@@ -32,7 +29,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -434,19 +432,8 @@ public class Utils {
         }
     }
 
-    /**
-     * <p>The "compact" format is a representation of a whole number N using an unsigned 32 bit number similar to a
-     * floating point format. The most significant 8 bits are the unsigned exponent of base 256. This exponent can
-     * be thought of as "number of bytes of N". The lower 23 bits are the mantissa. Bit number 24 (0x800000) represents
-     * the sign of N. Therefore, N = (-1^sign) * mantissa * 256^(exponent-3).</p>
-     *
-     * <p>Satoshi's original implementation used BN_bn2mpi() and BN_mpi2bn(). MPI uses the most significant bit of the
-     * first byte as sign. Thus 0x1234560000 is compact 0x05123456 and 0xc0de000000 is compact 0x0600c0de. Compact
-     * 0x05c0de00 would be -0x40de000000.</p>
-     *
-     * <p>Bitcoin only uses this "compact" format for encoding difficulty targets, which are unsigned 256bit quantities.
-     * Thus, all the complexities of the sign bit and using base 256 are probably an implementation accident.</p>
-     */
+    // The representation of nBits uses another home-brew encoding, as a way to represent a large
+    // hash value in only 32 bits.
     public static BigInteger decodeCompactBits(long compact) {
         int size = ((int) (compact >> 24)) & 0xFF;
         byte[] bytes = new byte[4 + size];
@@ -455,27 +442,6 @@ public class Utils {
         if (size >= 2) bytes[5] = (byte) ((compact >> 8) & 0xFF);
         if (size >= 3) bytes[6] = (byte) ((compact >> 0) & 0xFF);
         return decodeMPI(bytes, true);
-    }
-
-    /**
-     * @see Utils#decodeCompactBits(long)
-     */
-    public static long encodeCompactBits(BigInteger value) {
-        long result;
-        int size = value.toByteArray().length;
-        if (size <= 3)
-            result = value.longValue() << 8 * (3 - size);
-        else
-            result = value.shiftRight(8 * (size - 3)).longValue();
-        // The 0x00800000 bit denotes the sign.
-        // Thus, if it is already set, divide the mantissa by 256 and increase the exponent.
-        if ((result & 0x00800000L) != 0) {
-            result >>= 8;
-            size++;
-        }
-        result |= size << 24;
-        result |= value.signum() == -1 ? 0x00800000 : 0;
-        return result;
     }
 
     /**
@@ -495,7 +461,7 @@ public class Utils {
      */
     public static Date rollMockClockMillis(long millis) {
         if (mockTime == null)
-            throw new IllegalStateException("You need to use setMockClock() first.");
+            mockTime = new Date();
         mockTime = new Date(mockTime.getTime() + millis);
         return mockTime;
     }
@@ -503,15 +469,8 @@ public class Utils {
     /**
      * Sets the mock clock to the current time.
      */
-    public static void setMockClock() {
-        mockTime = new Date();
-    }
-
-    /**
-     * Sets the mock clock to the given time (in seconds).
-     */
-    public static void setMockClock(long mockClockSeconds) {
-        mockTime = new Date(mockClockSeconds * 1000);
+    public static void setMockClock(long mockClock) {
+        mockTime = new Date(mockClock * 1000);
     }
 
     /**
@@ -524,17 +483,12 @@ public class Utils {
             return new Date();
     }
 
-    // TODO: Replace usages of this where the result is / 1000 with currentTimeSeconds.
-    /** Returns the current time in milliseconds since the epoch, or a mocked out equivalent. */
+    /** Returns the current time in seconds since the epoch, or a mocked out equivalent. */
     public static long currentTimeMillis() {
         if (mockTime != null)
             return mockTime.getTime();
         else
             return System.currentTimeMillis();
-    }
-
-    public static long currentTimeSeconds() {
-        return currentTimeMillis() / 1000;
     }
 
     public static byte[] copyOf(byte[] in, int length) {
@@ -642,44 +596,5 @@ public class Utils {
         if (mockSleepQueue != null) {
             mockSleepQueue.offer(true);
         }
-    }
-
-    private static class Pair implements Comparable<Pair> {
-        int item, count;
-        public Pair(int item, int count) { this.count = count; this.item = item; }
-        @Override public int compareTo(Pair o) { return -Ints.compare(count, o.count); }
-    }
-
-    public static int maxOfMostFreq(int... items) {
-        // Java 6 sucks.
-        ArrayList<Integer> list = new ArrayList<Integer>(items.length);
-        for (int item : items) list.add(item);
-        return maxOfMostFreq(list);
-    }
-
-    public static int maxOfMostFreq(List<Integer> items) {
-        if (items.isEmpty())
-            return 0;
-        // This would be much easier in a functional language (or in Java 8).
-        items = Ordering.natural().reverse().sortedCopy(items);
-        LinkedList<Pair> pairs = Lists.newLinkedList();
-        pairs.add(new Pair(items.get(0), 0));
-        for (int item : items) {
-            Pair pair = pairs.getLast();
-            if (pair.item != item)
-                pairs.add((pair = new Pair(item, 0)));
-            pair.count++;
-        }
-        // pairs now contains a uniqified list of the sorted inputs, with counts for how often that item appeared.
-        // Now sort by how frequently they occur, and pick the max of the most frequent.
-        Collections.sort(pairs);
-        int maxCount = pairs.getFirst().count;
-        int maxItem = pairs.getFirst().item;
-        for (Pair pair : pairs) {
-            if (pair.count != maxCount)
-                break;
-            maxItem = Math.max(maxItem, pair.item);
-        }
-        return maxItem;
     }
 }

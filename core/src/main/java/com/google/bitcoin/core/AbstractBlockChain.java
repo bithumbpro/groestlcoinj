@@ -173,7 +173,7 @@ public abstract class AbstractBlockChain {
      * Adds a generic {@link BlockChainListener} listener to the chain.
      */
     public void addListener(BlockChainListener listener) {
-        addListener(listener, Threading.USER_THREAD);
+        addListener(listener, Threading.SAME_THREAD);
     }
 
     /**
@@ -498,8 +498,8 @@ public abstract class AbstractBlockChain {
         // (in the case of the listener being a wallet). Wallets need to know how deep each transaction is so
         // coinbases aren't used before maturity.
         boolean first = true;
-        Set<Sha256Hash> falsePositives = Sets.newHashSet();
-        if (filteredTxHashList != null) falsePositives.addAll(filteredTxHashList);
+        Set<Transaction> falsePositives = Sets.newHashSet();
+        if (filteredTxn != null) falsePositives.addAll(filteredTxn.values());
         for (final ListenerRegistration<BlockChainListener> registration : listeners) {
             if (registration.executor == Threading.SAME_THREAD) {
                 informListenerForNewTransactions(block, newBlockType, filteredTxHashList, filteredTxn,
@@ -514,7 +514,7 @@ public abstract class AbstractBlockChain {
                     public void run() {
                         try {
                             // We can't do false-positive handling when executing on another thread
-                            Set<Sha256Hash> ignoredFalsePositives = Sets.newHashSet();
+                            Set<Transaction> ignoredFalsePositives = Sets.newHashSet();
                             informListenerForNewTransactions(block, newBlockType, filteredTxHashList, filteredTxn,
                                     newStoredBlock, notFirst, registration.listener, ignoredFalsePositives);
                             if (newBlockType == NewBlockType.BEST_CHAIN)
@@ -539,7 +539,7 @@ public abstract class AbstractBlockChain {
                                                          @Nullable Map<Sha256Hash, Transaction> filteredTxn,
                                                          StoredBlock newStoredBlock, boolean first,
                                                          BlockChainListener listener,
-                                                         Set<Sha256Hash> falsePositives) throws VerificationException {
+                                                         Set<Transaction> falsePositives) throws VerificationException {
         if (block.transactions != null) {
             // If this is not the first wallet, ask for the transactions to be duplicated before being given
             // to the wallet when relevant. This ensures that if we have two connected wallets and a tx that
@@ -556,14 +556,11 @@ public abstract class AbstractBlockChain {
             int relativityOffset = 0;
             for (Sha256Hash hash : filteredTxHashList) {
                 Transaction tx = filteredTxn.get(hash);
-                if (tx != null) {
+                if (tx != null)
                     sendTransactionsToListener(newStoredBlock, newBlockType, listener, relativityOffset,
                             Arrays.asList(tx), !first, falsePositives);
-                } else {
-                    if (listener.notifyTransactionIsInBlock(hash, newStoredBlock, newBlockType, relativityOffset)) {
-                        falsePositives.remove(hash);
-                    }
-                }
+                else
+                    listener.notifyTransactionIsInBlock(hash, newStoredBlock, newBlockType, relativityOffset);
                 relativityOffset++;
             }
         }
@@ -729,11 +726,11 @@ public abstract class AbstractBlockChain {
                                                    int relativityOffset,
                                                    List<Transaction> transactions,
                                                    boolean clone,
-                                                   Set<Sha256Hash> falsePositives) throws VerificationException {
+                                                   Set<Transaction> falsePositives) throws VerificationException {
         for (Transaction tx : transactions) {
             try {
                 if (listener.isTransactionRelevant(tx)) {
-                    falsePositives.remove(tx.getHash());
+                    falsePositives.remove(tx);
                     if (clone)
                         tx = new Transaction(tx.params, tx.bitcoinSerialize());
                     listener.receiveFromBlock(tx, block, blockType, relativityOffset++);
@@ -837,7 +834,7 @@ public abstract class AbstractBlockChain {
         BigInteger PastDifficultyAveragePrev = BigInteger.ZERO;
 
         if (BlockLastSolved == null || BlockLastSolved.getHeight() == 0 || BlockLastSolved.getHeight() < PastBlocksMin) {
-            verifyDifficulty(params.getMaxTarget(), storedPrev, nextBlock);
+            verifyDifficulty(params.getProofOfWorkLimit(), storedPrev, nextBlock);
             return;
         }
 
@@ -907,7 +904,7 @@ public abstract class AbstractBlockChain {
 
         //if (BlockLastSolved == NULL || BlockLastSolved->nHeight == 0 || BlockLastSolved->nHeight < PastBlocksMin) { return bnProofOfWorkLimit.GetCompact(); }
         if (BlockLastSolved == null || BlockLastSolved.getHeight() == 0 || (long)BlockLastSolved.getHeight() < PastBlocksMin)
-        { verifyDifficulty(params.getMaxTarget(), storedPrev, nextBlock); return;}
+        { verifyDifficulty(params.proofOfWorkLimit, storedPrev, nextBlock); return;}
 
         for (int i = 1; BlockReading != null && BlockReading.getHeight() > 0; i++) {
             if (PastBlocksMax > 0 && i > PastBlocksMax)

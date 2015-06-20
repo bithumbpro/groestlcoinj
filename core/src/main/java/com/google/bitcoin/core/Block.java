@@ -102,7 +102,7 @@ public class Block extends Message {
     Block(NetworkParameters params) {
         super(params);
         // Set up a few basic things. We are not complete after this though.
-        version = 1;
+        version = 112;
         difficultyTarget = 0x1d07fff8L;
         time = System.currentTimeMillis() / 1000;
         prevBlockHash = Sha256Hash.ZERO_HASH;
@@ -628,7 +628,7 @@ public class Block extends Message {
     public BigInteger getDifficultyTargetAsInteger() throws VerificationException {
         maybeParseHeader();
         BigInteger target = Utils.decodeCompactBits(difficultyTarget);
-        if (target.signum() <= 0 || target.compareTo(params.maxTarget) > 0)
+        if (target.signum() <= 0 || target.compareTo(params.proofOfWorkLimit) > 0)
             throw new VerificationException("Difficulty target is bad: " + target.toString());
         return target;
     }
@@ -660,7 +660,7 @@ public class Block extends Message {
     private void checkTimestamp() throws VerificationException {
         maybeParseHeader();
         // Allow injection of a fake clock to allow unit testing.
-        long currentTime = Utils.currentTimeSeconds();
+        long currentTime = Utils.currentTimeMillis()/1000;
         if (time > currentTime + ALLOWED_TIME_DRIFT)
             throw new VerificationException("Block too far in future");
     }
@@ -806,8 +806,8 @@ public class Block extends Message {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof Block))
+            return false;
         Block other = (Block) o;
         return getHash().equals(other.getHash());
     }
@@ -965,7 +965,7 @@ public class Block extends Message {
         // counter in the scriptSig so every transaction has a different hash.
         coinbase.addInput(new TransactionInput(params, coinbase, new byte[]{(byte) txCounter, (byte) (txCounter++ >> 8)}));
         coinbase.addOutput(new TransactionOutput(params, coinbase, value,
-                ScriptBuilder.createOutputScript(ECKey.fromPublicOnly(pubKeyTo)).getProgram()));
+                ScriptBuilder.createOutputScript(new ECKey(null, pubKeyTo)).getProgram()));
         transactions.add(coinbase);
         coinbase.setParent(this);
         coinbase.length = coinbase.bitcoinSerialize().length;
@@ -974,15 +974,12 @@ public class Block extends Message {
 
     static final byte[] EMPTY_BYTES = new byte[32];
 
-    // It's pretty weak to have this around at runtime: fix later.
-    private static final byte[] pubkeyForTesting = new ECKey().getPubKey();
-
     /**
      * Returns a solved block that builds on top of this one. This exists for unit tests.
      */
     @VisibleForTesting
     public Block createNextBlock(Address to, long time) {
-        return createNextBlock(to, null, time, pubkeyForTesting, Utils.toNanoCoins(50, 0));
+        return createNextBlock(to, null, time, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
     }
 
     /**
@@ -1033,12 +1030,12 @@ public class Block extends Message {
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, TransactionOutPoint prevOut) {
-        return createNextBlock(to, prevOut, Utils.currentTimeSeconds(), pubkeyForTesting, Utils.toNanoCoins(50, 0));
+        return createNextBlock(to, prevOut, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
     }
 
     @VisibleForTesting
     public Block createNextBlock(@Nullable Address to, BigInteger value) {
-        return createNextBlock(to, null, Utils.currentTimeSeconds(), pubkeyForTesting, value);
+        return createNextBlock(to, null, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, value);
     }
 
     @VisibleForTesting
@@ -1048,7 +1045,7 @@ public class Block extends Message {
 
     @VisibleForTesting
     public Block createNextBlockWithCoinbase(byte[] pubKey, BigInteger coinbaseValue) {
-        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, coinbaseValue);
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, coinbaseValue);
     }
 
     /**
@@ -1057,7 +1054,7 @@ public class Block extends Message {
      */
     @VisibleForTesting
     Block createNextBlockWithCoinbase(byte[] pubKey) {
-        return createNextBlock(null, null, Utils.currentTimeSeconds(), pubKey, Utils.toNanoCoins(50, 0));
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, Utils.toNanoCoins(50, 0));
     }
 
     @VisibleForTesting

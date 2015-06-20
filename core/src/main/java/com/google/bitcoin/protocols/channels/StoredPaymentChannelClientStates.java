@@ -57,9 +57,9 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
      * {@link TransactionBroadcaster} which are used to complete and announce contract and refund
      * transactions.
      */
-    public StoredPaymentChannelClientStates(@Nullable Wallet containingWallet, TransactionBroadcaster announcePeerGroup) {
+    public StoredPaymentChannelClientStates(Wallet containingWallet, TransactionBroadcaster announcePeerGroup) {
         this.announcePeerGroup = checkNotNull(announcePeerGroup);
-        this.containingWallet = containingWallet;
+        this.containingWallet = checkNotNull(containingWallet);
     }
 
     /** Returns this extension from the given wallet, or null if no such extension was added. */
@@ -94,7 +94,7 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
         lock.lock();
         try {
             final Set<StoredClientChannel> setChannels = mapChannels.get(id);
-            final long nowSeconds = Utils.currentTimeSeconds();
+            final long nowSeconds = Utils.currentTimeMillis() / 1000;
             int earliestTime = Integer.MAX_VALUE;
             for (StoredClientChannel channel : setChannels) {
                 synchronized (channel) {
@@ -255,7 +255,7 @@ public class StoredPaymentChannelClientStates implements WalletExtension {
                 StoredClientChannel channel = new StoredClientChannel(new Sha256Hash(storedState.getId().toByteArray()),
                         new Transaction(params, storedState.getContractTransaction().toByteArray()),
                         refundTransaction,
-                        ECKey.fromPrivate(storedState.getMyKey().toByteArray()),
+                        new ECKey(new BigInteger(1, storedState.getMyKey().toByteArray()), null, true),
                         BigInteger.valueOf(storedState.getValueToMe()),
                         BigInteger.valueOf(storedState.getRefundFees()), false);
                 if (storedState.hasCloseTransactionHash())

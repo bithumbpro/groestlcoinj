@@ -71,17 +71,13 @@ public class StoredUndoableBlock implements Serializable {
         return blockHash;
     }
 
-    @Override
     public int hashCode() {
         return blockHash.hashCode();
     }
 
-    @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        StoredUndoableBlock other = (StoredUndoableBlock) o;
-        return getHash().equals(other.getHash());
+        if (!(o instanceof StoredUndoableBlock)) return false;
+        return ((StoredUndoableBlock)o).getHash().equals(this.getHash());
     }
 
     @Override

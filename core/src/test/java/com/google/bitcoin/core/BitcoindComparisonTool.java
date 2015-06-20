@@ -31,7 +31,6 @@ import java.io.File;
 import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
 
 /**
  * A tool for comparing the blocks which are accepted/rejected by bitcoind/bitcoinj
@@ -121,8 +120,6 @@ public class BitcoindComparisonTool {
             }
         }, Threading.SAME_THREAD);
         peers.addPeerFilterProvider(new PeerFilterProvider() {
-            private final Lock lock = Threading.lock("pfp");
-
             @Override public long getEarliestKeyCreationTime() {
                 return Long.MAX_VALUE;
             }
@@ -136,11 +133,6 @@ public class BitcoindComparisonTool {
                 return false;
             }
 
-            @Override
-            public Lock getLock() {
-                return lock;
-            }
-
             @Override public BloomFilter getBloomFilter(int size, double falsePositiveRate, long nTweak) {
                 BloomFilter filter = new BloomFilter(1, 0.99, 0);
                 filter.setMatchAll();
@@ -151,7 +143,7 @@ public class BitcoindComparisonTool {
         bitcoindChainHead = params.getGenesisBlock().getHash();
         
         // Connect to bitcoind and make sure it has no blocks
-        peers.startAsync();
+        peers.start();
         peers.setMaxConnections(1);
         peers.downloadBlockChain();
         

@@ -23,7 +23,6 @@ import java.io.OutputStream;
 import java.util.Arrays;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static java.lang.Math.*;
 
 /**
  * <p>A Bloom filter is a probabilistic data structure which can be sent to another client so that it can avoid
@@ -102,12 +101,11 @@ public class BloomFilter extends Message {
     public BloomFilter(int elements, double falsePositiveRate, long randomNonce, BloomUpdate updateFlag) {
         // The following formulas were stolen from Wikipedia's page on Bloom Filters (with the addition of min(..., MAX_...))
         //                        Size required for a given number of elements and false-positive rate
-        int size = (int)(-1  / (pow(log(2), 2)) * elements * log(falsePositiveRate));
-        size = max(1, min(size, (int) MAX_FILTER_SIZE * 8) / 8);
-        data = new byte[size];
+        int size = Math.min((int)(-1  / (Math.pow(Math.log(2), 2)) * elements * Math.log(falsePositiveRate)),
+                            (int)MAX_FILTER_SIZE * 8) / 8;
+        data = new byte[size <= 0 ? 1 : size];
         // Optimal number of hash functions for a given filter size and element count.
-        hashFuncs = (int)(data.length * 8 / (double)elements * log(2));
-        hashFuncs = max(1, min(hashFuncs, MAX_HASH_FUNCS));
+        hashFuncs = Math.min((int)(data.length * 8 / (double)elements * Math.log(2)), MAX_HASH_FUNCS);
         this.nTweak = randomNonce;
         this.nFlags = (byte)(0xff & updateFlag.ordinal());
     }
@@ -116,7 +114,7 @@ public class BloomFilter extends Message {
      * Returns the theoretical false positive rate of this filter if were to contain the given number of elements.
      */
     public double getFalsePositiveRate(int elements) {
-        return pow(1 - pow(E, -1.0 * (hashFuncs * elements) / (data.length * 8)), hashFuncs);
+        return Math.pow(1 - Math.pow(Math.E, -1.0 * (hashFuncs * elements) / (data.length * 8)), hashFuncs);
     }
 
     @Override
@@ -266,13 +264,11 @@ public class BloomFilter extends Message {
     }
     
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        BloomFilter other = (BloomFilter) o;
-        return hashFuncs == other.hashFuncs &&
-               nTweak == other.nTweak &&
-               Arrays.equals(data, other.data);
+    public boolean equals(Object other) {
+        return other instanceof BloomFilter &&
+                ((BloomFilter) other).hashFuncs == this.hashFuncs &&
+                ((BloomFilter) other).nTweak == this.nTweak &&
+                Arrays.equals(((BloomFilter) other).data, this.data);
     }
 
     @Override

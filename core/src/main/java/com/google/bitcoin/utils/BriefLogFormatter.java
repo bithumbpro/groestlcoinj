@@ -21,7 +21,10 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.text.MessageFormat;
 import java.util.Date;
-import java.util.logging.*;
+import java.util.logging.Formatter;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 /**
  * A Java logging formatter that writes more compact output than the default.
@@ -37,10 +40,7 @@ public class BriefLogFormatter extends Formatter {
     /** Configures JDK logging to use this class for everything. */
     public static void init() {
         logger = Logger.getLogger("");
-        final Handler[] handlers = logger.getHandlers();
-        // In regular Java there is always a handler. Avian doesn't install one however.
-        if (handlers.length > 0)
-            handlers[0].setFormatter(new BriefLogFormatter());
+        logger.getHandlers()[0].setFormatter(new BriefLogFormatter());
     }
 
     public static void initVerbose() {

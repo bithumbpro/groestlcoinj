@@ -1,6 +1,5 @@
 /**
  * Copyright 2013 Google Inc.
- * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,8 +74,7 @@ public class ForwardingService {
         }
 
         // Download the block chain and wait until it's done.
-        kit.startAsync();
-        kit.awaitRunning();
+        kit.startAndWait();
 
         // We want to know when we receive money.
         kit.wallet().addEventListener(new AbstractWalletEventListener() {
@@ -110,7 +108,7 @@ public class ForwardingService {
             }
         });
 
-        Address sendToAddress = kit.wallet().currentReceiveKey().toAddress(params);
+        Address sendToAddress = kit.wallet().getKeys().get(0).toAddress(params);
         System.out.println("Send coins to: " + sendToAddress);
         System.out.println("Waiting for coins to arrive. Press Ctrl-C to quit.");
 

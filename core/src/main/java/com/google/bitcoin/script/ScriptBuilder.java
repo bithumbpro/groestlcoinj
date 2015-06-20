@@ -21,7 +21,6 @@ import com.google.bitcoin.core.ECKey;
 import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.common.collect.Lists;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -41,44 +40,22 @@ public class ScriptBuilder {
         chunks = Lists.newLinkedList();
     }
 
-    public ScriptBuilder addChunk(ScriptChunk chunk) {
-        chunks.add(chunk);
+    public ScriptBuilder op(int opcode) {
+        chunks.add(new ScriptChunk(true, new byte[]{(byte)opcode}));
         return this;
     }
 
-    public ScriptBuilder op(int opcode) {
-        checkArgument(opcode > OP_PUSHDATA4);
-        return addChunk(new ScriptChunk(opcode, null));
-    }
-
     public ScriptBuilder data(byte[] data) {
-        // implements BIP62
         byte[] copy = Arrays.copyOf(data, data.length);
-        int opcode;
-        if (data.length == 0) {
-            opcode = OP_0;
-        } else if (data.length == 1) {
-            byte b = data[0];
-            if (b >= 1 && b <= 16)
-                opcode = Script.encodeToOpN(b);
-            else
-                opcode = 1;
-        } else if (data.length < OP_PUSHDATA1) {
-            opcode = data.length;
-        } else if (data.length < 256) {
-            opcode = OP_PUSHDATA1;
-        } else if (data.length < 65536) {
-            opcode = OP_PUSHDATA2;
-        } else {
-            throw new RuntimeException("Unimplemented");
-        }
-        return addChunk(new ScriptChunk(opcode, copy));
+        chunks.add(new ScriptChunk(false, copy));
+        return this;
     }
 
     public ScriptBuilder smallNum(int num) {
         checkArgument(num >= 0, "Cannot encode negative numbers with smallNum");
         checkArgument(num <= 16, "Cannot encode numbers larger than 16 with smallNum");
-        return addChunk(new ScriptChunk(Script.encodeToOpN(num), null));
+        chunks.add(new ScriptChunk(true, new byte[]{(byte)Script.encodeToOpN(num)}));
+        return this;
     }
 
     public Script build() {
@@ -139,7 +116,10 @@ public class ScriptBuilder {
 
     /** Create a program that satisfies an OP_CHECKMULTISIG program. */
     public static Script createMultiSigInputScript(List<TransactionSignature> signatures) {
-        return createP2SHMultiSigInputScript(signatures, null);
+        List<byte[]> sigs = new ArrayList<byte[]>(signatures.size());
+        for (TransactionSignature signature : signatures)
+            sigs.add(signature.encodeToBitcoin());
+        return createMultiSigInputScriptBytes(sigs);
     }
 
     /** Create a program that satisfies an OP_CHECKMULTISIG program. */
@@ -149,30 +129,11 @@ public class ScriptBuilder {
 
     /** Create a program that satisfies an OP_CHECKMULTISIG program, using pre-encoded signatures. */
     public static Script createMultiSigInputScriptBytes(List<byte[]> signatures) {
-    	return createMultiSigInputScriptBytes(signatures, null);
-    }
-
-    /** Create a program that satisfies a pay-to-script hashed OP_CHECKMULTISIG program. */
-    public static Script createP2SHMultiSigInputScript(List<TransactionSignature> signatures,
-                                                       byte[] multisigProgramBytes) {
-        List<byte[]> sigs = new ArrayList<byte[]>(signatures.size());
-        for (TransactionSignature signature : signatures)
-            sigs.add(signature.encodeToBitcoin());
-        return createMultiSigInputScriptBytes(sigs, multisigProgramBytes);
-    }
-
-    /** 
-     * Create a program that satisfies an OP_CHECKMULTISIG program, using pre-encoded signatures. 
-     * Optionally, appends the script program bytes if spending a P2SH output.
-     */
-    public static Script createMultiSigInputScriptBytes(List<byte[]> signatures, @Nullable byte[] multisigProgramBytes) {
         checkArgument(signatures.size() <= 16);
         ScriptBuilder builder = new ScriptBuilder();
         builder.smallNum(0);  // Work around a bug in CHECKMULTISIG that is now a required part of the protocol.
         for (byte[] signature : signatures)
             builder.data(signature);
-        if (multisigProgramBytes!= null)
-        	builder.data(multisigProgramBytes);
         return builder.build();
     }
 

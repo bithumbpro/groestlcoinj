@@ -67,7 +67,7 @@ public class CoinbaseBlockTest {
         assertNotNull(miningKey);
 
         Wallet wallet = new Wallet(params);
-        wallet.importKey(miningKey);
+        wallet.addKey(miningKey);
 
         // Initial balance should be zero by construction.
         assertEquals(BigInteger.ZERO, wallet.getBalance());

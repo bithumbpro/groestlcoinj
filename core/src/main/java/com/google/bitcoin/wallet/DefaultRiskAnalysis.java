@@ -20,17 +20,13 @@ package com.google.bitcoin.wallet;
 import com.google.bitcoin.core.NetworkParameters;
 import com.google.bitcoin.core.Transaction;
 import com.google.bitcoin.core.TransactionConfidence;
-import com.google.bitcoin.core.TransactionInput;
 import com.google.bitcoin.core.TransactionOutput;
 import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.script.ScriptChunk;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.math.BigInteger;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -42,13 +38,6 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class DefaultRiskAnalysis implements RiskAnalysis {
     private static final Logger log = LoggerFactory.getLogger(DefaultRiskAnalysis.class);
-
-    /**
-     * Any standard output smaller than this value (in satoshis) will be considered risky, as it's most likely be
-     * rejected by the network. Currently it's 546 satoshis. This is different from {@link Transaction#MIN_NONDUST_OUTPUT}
-     * because of an upcoming fee change in Bitcoin Core 0.9.
-     */
-    public static final BigInteger MIN_ANALYSIS_NONDUST_OUTPUT = BigInteger.valueOf(546);
 
     protected final Transaction tx;
     protected final List<Transaction> dependencies;
@@ -107,8 +96,7 @@ public class DefaultRiskAnalysis implements RiskAnalysis {
     public enum RuleViolation {
         NONE,
         VERSION,
-        DUST,
-        SHORTEST_POSSIBLE_PUSHDATA
+        DUST
     }
 
     /**
@@ -127,28 +115,9 @@ public class DefaultRiskAnalysis implements RiskAnalysis {
         final List<TransactionOutput> outputs = tx.getOutputs();
         for (int i = 0; i < outputs.size(); i++) {
             TransactionOutput output = outputs.get(i);
-            if (MIN_ANALYSIS_NONDUST_OUTPUT.compareTo(output.getValue()) > 0) {
+            if (output.getMinNonDustValue().compareTo(output.getValue()) > 0) {
                 log.warn("TX considered non-standard due to output {} being dusty", i);
                 return RuleViolation.DUST;
-            }
-            for (ScriptChunk chunk : output.getScriptPubKey().getChunks()) {
-                if (chunk.isPushData() && !chunk.isShortestPossiblePushData()) {
-                    log.warn("TX considered non-standard due to output {} having a longer than necessary data push: {}",
-                            i, chunk);
-                    return RuleViolation.SHORTEST_POSSIBLE_PUSHDATA;
-                }
-            }
-        }
-
-        final List<TransactionInput> inputs = tx.getInputs();
-        for (int i = 0; i < inputs.size(); i++) {
-            TransactionInput input = inputs.get(i);
-            for (ScriptChunk chunk : input.getScriptSig().getChunks()) {
-                if (chunk.data != null && !chunk.isShortestPossiblePushData()) {
-                    log.warn("TX considered non-standard due to input {} having a longer than necessary data push: {}",
-                            i, chunk);
-                    return RuleViolation.SHORTEST_POSSIBLE_PUSHDATA;
-                }
             }
         }
 

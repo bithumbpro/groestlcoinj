@@ -1,6 +1,5 @@
 /*
  * Copyright 2011 Google Inc.
- * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +14,8 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.testing;
+package com.google.bitcoin.core;
 
-import com.google.bitcoin.core.*;
 import com.google.bitcoin.net.*;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.BlockStore;
@@ -38,7 +36,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkState;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Utility class that makes it easy to work with mock NetworkConnections.
@@ -57,7 +55,7 @@ public class TestWithNetworkConnections {
     private final ClientConnectionManager channels;
     protected final BlockingQueue<InboundMessageQueuer> newPeerWriteTargetQueue = new LinkedBlockingQueue<InboundMessageQueuer>();
 
-    public enum ClientType {
+    enum ClientType {
         NIO_CLIENT_MANAGER,
         BLOCKING_CLIENT_MANAGER,
         NIO_CLIENT,
@@ -85,15 +83,14 @@ public class TestWithNetworkConnections {
         Wallet.SendRequest.DEFAULT_FEE_PER_KB = BigInteger.ZERO;
         this.blockStore = blockStore;
         wallet = new Wallet(unitTestParams);
-        key = wallet.freshReceiveKey();
+        key = new ECKey();
         address = key.toAddress(unitTestParams);
+        wallet.addKey(key);
         blockChain = new BlockChain(unitTestParams, wallet, blockStore);
 
         startPeerServers();
-        if (clientType == ClientType.NIO_CLIENT_MANAGER || clientType == ClientType.BLOCKING_CLIENT_MANAGER) {
-            channels.startAsync();
-            channels.awaitRunning();
-        }
+        if (clientType == ClientType.NIO_CLIENT_MANAGER || clientType == ClientType.BLOCKING_CLIENT_MANAGER)
+            channels.startAndWait();
 
         socketAddress = new InetSocketAddress("127.0.0.1", 1111);
     }
@@ -121,8 +118,7 @@ public class TestWithNetworkConnections {
                 };
             }
         }, new InetSocketAddress("127.0.0.1", 2000 + i));
-        peerServers[i].startAsync();
-        peerServers[i].awaitRunning();
+        peerServers[i].startAndWait();
     }
 
     public void tearDown() throws Exception {
@@ -136,8 +132,7 @@ public class TestWithNetworkConnections {
     }
 
     protected void stopPeerServer(int i) {
-        peerServers[i].stopAsync();
-        peerServers[i].awaitTerminated();
+        peerServers[i].stopAndWait();
     }
 
     protected InboundMessageQueuer connect(Peer peer, VersionMessage versionMessage) throws Exception {
@@ -168,8 +163,8 @@ public class TestWithNetworkConnections {
         writeTarget.sendMessage(versionMessage);
         writeTarget.sendMessage(new VersionAck());
         try {
-            checkState(writeTarget.nextMessageBlocking() instanceof VersionMessage);
-            checkState(writeTarget.nextMessageBlocking() instanceof VersionAck);
+            assertTrue(writeTarget.nextMessageBlocking() instanceof VersionMessage);
+            assertTrue(writeTarget.nextMessageBlocking() instanceof VersionAck);
             synchronized (doneConnecting) {
                 doneConnecting.set(true);
             }

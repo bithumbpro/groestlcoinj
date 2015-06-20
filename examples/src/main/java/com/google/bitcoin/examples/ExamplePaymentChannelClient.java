@@ -1,6 +1,5 @@
 /*
  * Copyright 2013 Google Inc.
- * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,29 +18,25 @@ package com.google.bitcoin.examples;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.kits.WalletAppKit;
-import com.google.bitcoin.params.RegTestParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.protocols.channels.PaymentChannelClientConnection;
 import com.google.bitcoin.protocols.channels.StoredPaymentChannelClientStates;
 import com.google.bitcoin.protocols.channels.ValueOutOfRangeException;
 import com.google.bitcoin.utils.BriefLogFormatter;
-import com.google.bitcoin.utils.Threading;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.Uninterruptibles;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 
 import static com.google.bitcoin.core.Utils.CENT;
 import static java.math.BigInteger.TEN;
+import static java.math.BigInteger.ZERO;
 
 /**
  * Simple client that connects to the given host, opens a channel, and pays one cent.
@@ -62,7 +57,7 @@ public class ExamplePaymentChannelClient {
     public ExamplePaymentChannelClient() {
         channelSize = CENT;
         myKey = new ECKey();
-        params = RegTestParams.get();
+        params = TestNet3Params.get();
     }
 
     public void run(final String host) throws Exception {
@@ -71,19 +66,17 @@ public class ExamplePaymentChannelClient {
         // the plugin that knows how to parse all the additional data is present during the load.
         appKit = new WalletAppKit(params, new File("."), "payment_channel_example_client") {
             @Override
-            protected List<WalletExtension> provideWalletExtensions() {
+            protected void addWalletExtensions() {
                 // The StoredPaymentChannelClientStates object is responsible for, amongst other things, broadcasting
                 // the refund transaction if its lock time has expired. It also persists channels so we can resume them
                 // after a restart.
-                return ImmutableList.<WalletExtension>of(new StoredPaymentChannelClientStates(null, peerGroup()));
+                wallet().addExtension(new StoredPaymentChannelClientStates(wallet(), peerGroup()));
             }
         };
-        appKit.connectToLocalHost();
-        appKit.startAsync();
-        appKit.awaitRunning();
+        appKit.startAndWait();
         // We now have active network connections and a fully synced wallet.
         // Add a new key which will be used for the multisig contract.
-        appKit.wallet().importKey(myKey);
+        appKit.wallet().addKey(myKey);
         appKit.wallet().allowSpendingUnconfirmedTransactions();
 
         System.out.println(appKit.wallet());
@@ -103,16 +96,17 @@ public class ExamplePaymentChannelClient {
         // demonstrates resuming a channel that wasn't closed yet. It should close automatically once we run out
         // of money on the channel.
         log.info("Round one ...");
-        openAndSend(timeoutSecs, server, channelID, 5);
+        openAndSend(timeoutSecs, server, channelID);
         log.info("Round two ...");
         log.info(appKit.wallet().toString());
-        openAndSend(timeoutSecs, server, channelID, 4);   // 4 times because the opening of the channel made a payment.
+        openAndSend(timeoutSecs, server, channelID);
+        log.info("Waiting ...");
+        Thread.sleep(60 * 60 * 1000);  // 1 hour.
         log.info("Stopping ...");
-        appKit.stopAsync();
-        appKit.awaitTerminated();
+        appKit.stopAndWait();
     }
 
-    private void openAndSend(int timeoutSecs, InetSocketAddress server, String channelID, final int times) throws IOException, ValueOutOfRangeException, InterruptedException {
+    private void openAndSend(int timeoutSecs, InetSocketAddress server, String channelID) throws IOException, ValueOutOfRangeException, InterruptedException {
         PaymentChannelClientConnection client = new PaymentChannelClientConnection(
                 server, timeoutSecs, appKit.wallet(), myKey, channelSize, channelID);
         // Opening the channel requires talking to the server, so it's asynchronous.
@@ -120,28 +114,17 @@ public class ExamplePaymentChannelClient {
         Futures.addCallback(client.getChannelOpenFuture(), new FutureCallback<PaymentChannelClientConnection>() {
             @Override
             public void onSuccess(PaymentChannelClientConnection client) {
-                // By the time we get here, if the channel is new then we already made a micropayment! The reason is,
-                // we are not allowed to have payment channels that pay nothing at all.
-                log.info("Success! Trying to make {} micropayments. Already paid {} satoshis on this channel",
-                        times, client.state().getValueSpent());
-                final BigInteger MICROPAYMENT_SIZE = CENT.divide(TEN);
-                for (int i = 0; i < times; i++) {
+                // Success! We should be able to try making micropayments now. Try doing it 5 times.
+                for (int i = 0; i < 5; i++) {
                     try {
-                        // Wait because the act of making a micropayment is async, and we're not allowed to overlap.
-                        // This callback is running on the user thread (see the last lines in openAndSend) so it's safe
-                        // for us to block here: if we didn't select the right thread, we'd end up blocking the payment
-                        // channels thread and would deadlock.
-                        Uninterruptibles.getUninterruptibly(client.incrementPayment(MICROPAYMENT_SIZE));
+                        client.incrementPayment(CENT.divide(TEN));
                     } catch (ValueOutOfRangeException e) {
                         log.error("Failed to increment payment by a CENT, remaining value is {}", client.state().getValueRefunded());
-                        throw new RuntimeException(e);
-                    } catch (ExecutionException e) {
-                        log.error("Failed to increment payment", e);
-                        throw new RuntimeException(e);
+                        System.exit(-3);
                     }
                     log.info("Successfully sent payment of one CENT, total remaining on channel is now {}", client.state().getValueRefunded());
                 }
-                if (client.state().getValueRefunded().compareTo(MICROPAYMENT_SIZE) < 0) {
+                if (client.state().getValueRefunded().equals(ZERO)) {
                     // Now tell the server we're done so they should broadcast the final transaction and refund us what's
                     // left. If we never do this then eventually the server will time out and do it anyway and if the
                     // server goes away for longer, then eventually WE will time out and the refund tx will get broadcast
@@ -160,7 +143,7 @@ public class ExamplePaymentChannelClient {
                 log.error("Failed to open connection", throwable);
                 latch.countDown();
             }
-        }, Threading.USER_THREAD);
+        });
         latch.await();
     }
 
