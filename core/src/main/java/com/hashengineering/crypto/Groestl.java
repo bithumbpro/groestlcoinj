@@ -8,7 +8,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Created by Hash Engineering on 4/24/14 for the Groestl algorithm
+ * Created by Hash Engineering on 12/24/14 for the Groestl algorithm
  */
 public class Groestl {
 
