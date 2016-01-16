@@ -90,7 +90,7 @@ public class DnsDiscovery implements PeerDiscovery {
                 final InetAddress[] inetAddresses;
                 try {
                     inetAddresses = future.get();
-                    //log.info("DNS seed {}: got {} peers", dnsSeeds[i], inetAddresses.length);
+                    //og.info("DNS seed {}: got {} peers", dnsSeeds[i], inetAddresses.length);
                 } catch (ExecutionException e) {
                     log.error("DNS seed {}: failed to look up: {}", dnsSeeds[i], e.getMessage());
                     continue;
