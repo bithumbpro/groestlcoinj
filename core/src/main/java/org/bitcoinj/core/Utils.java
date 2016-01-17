@@ -36,6 +36,8 @@ import java.math.BigInteger;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -453,6 +455,28 @@ public class Utils {
         return currentTimeMillis() / 1000;
     }
 
+    private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
+
+    /**
+     * Formats a given date+time value to an ISO 8601 string.
+     * @param dateTime value to format, as a Date
+     */
+    public static String dateTimeFormat(Date dateTime) {
+        DateFormat iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        iso8601.setTimeZone(UTC);
+        return iso8601.format(dateTime);
+    }
+
+    /**
+     * Formats a given date+time value to an ISO 8601 string.
+     * @param dateTime value to format, unix time (ms)
+     */
+    public static String dateTimeFormat(long dateTime) {
+        DateFormat iso8601 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        iso8601.setTimeZone(UTC);
+        return iso8601.format(dateTime);
+    }
+
     public static byte[] copyOf(byte[] in, int length) {
         byte[] out = new byte[length];
         System.arraycopy(in, 0, out, 0, Math.min(length, in.length));
@@ -490,15 +514,26 @@ public class Utils {
     }
 
     /**
+     * <p>Use the {@link #formatMessageForSigning(byte[], String)} for generic signing</p>
+     *
      * <p>Given a textual message, returns a byte buffer formatted as follows:</p>
      *
      * <tt><p>[24] "Bitcoin Signed Message:\n" [message.length as a varint] message</p></tt>
      */
     public static byte[] formatMessageForSigning(String message) {
+        return formatMessageForSigning(BITCOIN_SIGNED_MESSAGE_HEADER_BYTES, message);
+    }
+
+    /**
+     * <p>Given a textual message, returns a byte buffer formatted as follows:</p>
+     *
+     * <tt><p>[24] headerBytes [message.length as a varint] message</p></tt>
+     */
+    public static byte[] formatMessageForSigning(byte[] headerBytes, String message) {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            bos.write(BITCOIN_SIGNED_MESSAGE_HEADER_BYTES.length);
-            bos.write(BITCOIN_SIGNED_MESSAGE_HEADER_BYTES);
+            bos.write(headerBytes.length);
+            bos.write(headerBytes);
             byte[] messageBytes = message.getBytes(Charsets.UTF_8);
             VarInt size = new VarInt(messageBytes.length);
             bos.write(size.encode());

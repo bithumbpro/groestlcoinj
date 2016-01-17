@@ -18,27 +18,15 @@
 package org.bitcoinj.core;
 
 import org.bitcoinj.params.Networks;
-import org.bitcoinj.script.Script;
-import org.bitcoinj.script.ScriptBuilder;
-import org.bitcoinj.script.ScriptOpCodes;
+import org.bitcoinj.script.*;
+import org.slf4j.*;
 
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
-
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.lang.ref.WeakReference;
-import java.util.Arrays;
+import javax.annotation.*;
+import java.io.*;
+import java.util.*;
 
 import static com.google.common.base.Preconditions.*;
 import static com.google.common.base.Preconditions.checkState;
-import static org.bitcoinj.params.Networks.Family.RUBYCOIN;
-import static org.bitcoinj.params.Networks.Family.CANNACOIN;
 
 /**
  * A TransactionOutput message contains a scriptPubKey that controls who is able to spend its value. It is a sub-part
@@ -56,7 +44,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     private byte[] scriptBytes;
 
     // The script bytes are parsed and turned into a Script on demand.
-    private transient WeakReference<Script> scriptPubKey;
+    private transient Script scriptPubKey;
 
     // These fields are Java serialized but not Bitcoin serialized. They are used for tracking purposes in our wallet
     // only. If set to true, this output is counted towards our balance. If false and spentBy is null the tx output
@@ -127,17 +115,11 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     }
 
     public Script getScriptPubKey() throws ScriptException {
-        // Quick hack to try and reduce memory consumption on Androids. SoftReference is the same as WeakReference
-        // on Dalvik (by design), so this arrangement just means that we can avoid the cost of re-parsing the script
-        // bytes if getScriptPubKey is called multiple times in quick succession in between garbage collections.
-        Script script = scriptPubKey == null ? null : scriptPubKey.get();
-        if (script == null) {
+        if (scriptPubKey == null) {
             maybeParse();
-            script = new Script(scriptBytes);
-            scriptPubKey = new WeakReference<Script>(script);
-            return script;
+            scriptPubKey = new Script(scriptBytes);
         }
-        return script;
+        return scriptPubKey;
     }
 
     /**
@@ -443,7 +425,11 @@ public class TransactionOutput extends ChildMessage implements Serializable {
 
     @Override
     public int hashCode() {
-        return 31 * (int) value + (scriptBytes != null ? Arrays.hashCode(scriptBytes) : 0);
+        int result = (int) (value ^ (value >>> 32));
+        result = 31 * result + Arrays.hashCode(scriptBytes);
+        if (parent != null)
+            result *= parent.getHash().hashCode() + getIndex();
+        return result;
     }
     boolean isOpReturn()
     {

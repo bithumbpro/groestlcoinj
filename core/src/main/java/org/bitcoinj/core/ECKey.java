@@ -141,7 +141,7 @@ public class ECKey implements EncryptableItem, Serializable {
     // The two parts of the key. If "priv" is set, "pub" can always be calculated. If "pub" is set but not "priv", we
     // can only verify signatures not make them.
     protected final BigInteger priv;  // A field element.
-    protected final ECPoint pub;
+    protected final LazyECPoint pub;
 
     // Creation time of the key in seconds since the epoch, or zero if the key was deserialized from a version that did
     // not have this field.
@@ -173,11 +173,23 @@ public class ECKey implements EncryptableItem, Serializable {
         ECPrivateKeyParameters privParams = (ECPrivateKeyParameters) keypair.getPrivate();
         ECPublicKeyParameters pubParams = (ECPublicKeyParameters) keypair.getPublic();
         priv = privParams.getD();
-        pub = CURVE.getCurve().decodePoint(pubParams.getQ().getEncoded(true));
+        pub = new LazyECPoint(CURVE.getCurve(), pubParams.getQ().getEncoded(true));
         creationTimeSeconds = Utils.currentTimeSeconds();
     }
 
     protected ECKey(@Nullable BigInteger priv, ECPoint pub) {
+        if (priv != null) {
+            // Try and catch buggy callers or bad key imports, etc. Zero and one are special because these are often
+            // used as sentinel values and because scripting languages have a habit of auto-casting true and false to
+            // 1 and 0 or vice-versa. Type confusion bugs could therefore result in private keys with these values.
+            checkArgument(!priv.equals(BigInteger.ZERO));
+            checkArgument(!priv.equals(BigInteger.ONE));
+        }
+        this.priv = priv;
+        this.pub = new LazyECPoint(checkNotNull(pub));
+    }
+
+    protected ECKey(@Nullable BigInteger priv, LazyECPoint pub) {
         this.priv = priv;
         this.pub = checkNotNull(pub);
     }
@@ -186,16 +198,24 @@ public class ECKey implements EncryptableItem, Serializable {
      * Utility for compressing an elliptic curve point. Returns the same point if it's already compressed.
      * See the ECKey class docs for a discussion of point compression.
      */
-    public static ECPoint compressPoint(ECPoint uncompressed) {
-        return CURVE.getCurve().decodePoint(uncompressed.getEncoded(true));
+    public static ECPoint compressPoint(ECPoint point) {
+        return point.isCompressed() ? point : CURVE.getCurve().decodePoint(point.getEncoded(true));
+    }
+
+    public static LazyECPoint compressPoint(LazyECPoint point) {
+        return point.isCompressed() ? point : new LazyECPoint(compressPoint(point.get()));
     }
 
     /**
      * Utility for decompressing an elliptic curve point. Returns the same point if it's already compressed.
      * See the ECKey class docs for a discussion of point compression.
      */
-    public static ECPoint decompressPoint(ECPoint compressed) {
-        return CURVE.getCurve().decodePoint(compressed.getEncoded(false));
+    public static ECPoint decompressPoint(ECPoint point) {
+        return !point.isCompressed() ? point : CURVE.getCurve().decodePoint(point.getEncoded(false));
+    }
+
+    public static LazyECPoint decompressPoint(LazyECPoint point) {
+        return !point.isCompressed() ? point : new LazyECPoint(decompressPoint(point.get()));
     }
 
     /**
@@ -283,7 +303,7 @@ public class ECKey implements EncryptableItem, Serializable {
         if (!pub.isCompressed())
             return this;
         else
-            return new ECKey(priv, decompressPoint(pub));
+            return new ECKey(priv, decompressPoint(pub.get()));
     }
 
     /**
@@ -340,12 +360,12 @@ public class ECKey implements EncryptableItem, Serializable {
             ECPoint point = CURVE.getG().multiply(privKey);
             if (compressed)
                 point = compressPoint(point);
-            this.pub = point;
+            this.pub = new LazyECPoint(point);
         } else {
             // We expect the pubkey to be in regular encoded form, just as a BigInteger. Therefore the first byte is
             // a special marker byte.
             // TODO: This is probably not a useful API and may be confusing.
-            this.pub = CURVE.getCurve().decodePoint(pubKey);
+            this.pub = new LazyECPoint(CURVE.getCurve(), pubKey);
         }
     }
 
@@ -431,7 +451,7 @@ public class ECKey implements EncryptableItem, Serializable {
 
     /** Gets the public key in the form of an elliptic curve point object from Bouncy Castle. */
     public ECPoint getPubKeyPoint() {
-        return pub;
+        return pub.get();
     }
 
     /**
@@ -743,6 +763,7 @@ public class ECKey implements EncryptableItem, Serializable {
         return signMessage(message, null);
     }
 
+
     /**
      * Signs a text message using the standard Bitcoin messaging signing format and returns the signature as a base64
      * encoded string.
@@ -751,8 +772,19 @@ public class ECKey implements EncryptableItem, Serializable {
      * @throws KeyCrypterException if this ECKey is encrypted and no AESKey is provided or it does not decrypt the ECKey.
      */
     public String signMessage(String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
-        byte[] data = Utils.formatMessageForSigning(message);
-        Sha256Hash hash = Sha256Hash.createSingle(data);
+        return signMessage(Utils.BITCOIN_SIGNED_MESSAGE_HEADER_BYTES, message, aesKey);
+    }
+
+    /**
+     * Signs a text message using a generic messaging signing format and returns the signature as a base64
+     * encoded string.
+     *
+     * @throws IllegalStateException if this ECKey does not have the private part.
+     * @throws KeyCrypterException if this ECKey is encrypted and no AESKey is provided or it does not decrypt the ECKey.
+     */
+    public String signMessage(byte[] headerBytes, String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
+        byte[] data = Utils.formatMessageForSigning(headerBytes, message);
+        Sha256Hash hash = Sha256Hash.createDouble(data);
         ECDSASignature sig = sign(hash, aesKey);
         // Now we have to work backwards to figure out the recId needed to recover the signature.
         int recId = -1;
@@ -1144,6 +1176,7 @@ public class ECKey implements EncryptableItem, Serializable {
         if (includePrivate)
             helper.add("encryptedPrivateKey", encryptedPrivateKey);
         helper.add("isEncrypted", isEncrypted());
+        helper.add("isPubKeyOnly", isPubKeyOnly());
         return helper.toString();
     }
 }

@@ -87,6 +87,11 @@ public abstract class NetworkParameters implements Serializable {
     protected String id;
 
     /**
+     * The family of the network.
+     */
+    protected Object family;
+
+    /**
      * The depth of blocks required for a coinbase transaction to be spendable.
      */
     protected int spendableCoinbaseDepth;
@@ -194,6 +199,17 @@ public abstract class NetworkParameters implements Serializable {
      */
     public String getId() {
         return id;
+    }
+
+    /**
+     * A Java package style string acting as the coin family
+     */
+    public Object getFamily() {
+        return family;
+    }
+
+    public String getFamilyString() {
+        return family == null ? "" : family.toString();
     }
 
     public abstract String getPaymentProtocolId();

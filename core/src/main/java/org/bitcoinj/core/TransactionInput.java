@@ -373,6 +373,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
         outpoint.fromTx = out.getParentTransaction();
         value = out.getValue();
         out.markAsSpent(this);
+        value = out.getValue();
     }
 
     /**
