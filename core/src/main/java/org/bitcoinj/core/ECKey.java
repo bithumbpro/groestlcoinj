@@ -784,7 +784,7 @@ public class ECKey implements EncryptableItem, Serializable {
      */
     public String signMessage(byte[] headerBytes, String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
         byte[] data = Utils.formatMessageForSigning(headerBytes, message);
-        Sha256Hash hash = Sha256Hash.createDouble(data);
+        Sha256Hash hash = Sha256Hash.createSingle(data);
         ECDSASignature sig = sign(hash, aesKey);
         // Now we have to work backwards to figure out the recId needed to recover the signature.
         int recId = -1;
