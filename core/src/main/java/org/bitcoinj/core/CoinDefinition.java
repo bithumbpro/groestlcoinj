@@ -1,6 +1,9 @@
 package org.bitcoinj.core;
 
+import org.bitcoinj.net.discovery.HttpDiscovery;
+
 import java.math.BigInteger;
+import java.net.URI;
 import java.util.Map;
 
 /**
@@ -114,6 +117,39 @@ public class CoinDefinition {
             "88.198.69.99"
 
     };
+
+    public static final HttpDiscovery.Details[] httpSeeds = new HttpDiscovery.Details[] {
+            new HttpDiscovery.Details(
+                    ECKey.fromPublicOnly(Utils.HEX.decode("0248876142c407e9a05a07f96caf212eb5b54b68845ddee44739094b02e24d13e4")),
+                    URI.create("http://groestlcoin.org:8080/peers")
+            )
+    };
+
+    public static final int[] addrSeeds = new int[] {
+            0x68EC82DE,
+            0x68EC85C4,
+            0x68ECB2F5,
+            0x904CEF42,
+            0x95D2E231,
+            0xBC8648D5,
+            0xC06306CF,
+            0xC18862B8,
+            0xC6C7692B,
+            0xD2BA3B44,
+            0x1715CC22,
+            0x253B180F,
+            0x2A738931,
+            0x05092709,
+            0x36DF4CA5,
+            0x482E98FA,
+            0x4C707B0D,
+            0x535418B4,
+            0x5402225E,
+            0x5762B9F4,
+            0x5E17217A,
+            0x5E1737D3,
+            0x5F85745C,
+            0x5F85782F};
 
     public static int minBroadcastConnections = 1;   //0 for default; we need more peers.
 

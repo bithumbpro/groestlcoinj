@@ -38,10 +38,9 @@ public class InventoryItem {
         this.hash = hash;
     }
 
-
     @Override
     public String toString() {
-        return type.toString() + ": " + hash;
+        return type + ": " + hash;
     }
 
     @Override

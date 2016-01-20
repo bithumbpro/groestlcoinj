@@ -15,7 +15,6 @@ public class AddressMessage extends Message {
     private static final long serialVersionUID = 8058283864924679460L;
     private static final long MAX_ADDRESSES = 1024;
     private List<PeerAddress> addresses;
-    private transient long numAddresses = -1;
 
     /**
      * Contruct a new 'addr' message.
@@ -56,11 +55,11 @@ public class AddressMessage extends Message {
         super(params, payload, 0, false, false, UNKNOWN_LENGTH);
     }
 
-    public AddressMessage(NetworkParameters params) {
+    /*public AddressMessage(NetworkParameters params) {
        super(params);
         numAddresses = 0;
         addresses = new ArrayList<PeerAddress>((int) numAddresses);
-    }
+    }*/
 
     @Override
     protected void parseLite() throws ProtocolException {
@@ -68,7 +67,7 @@ public class AddressMessage extends Message {
 
     @Override
     void parse() throws ProtocolException {
-        numAddresses = readVarInt();
+        long numAddresses = readVarInt();
         // Guard against ultra large messages that will crash us.
         if (numAddresses > MAX_ADDRESSES)
             throw new ProtocolException("Address message too large.");
@@ -148,13 +147,7 @@ public class AddressMessage extends Message {
 
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("addr: ");
-        for (PeerAddress a : addresses) {
-            builder.append(a.toString());
-            builder.append(" ");
-        }
-        return builder.toString();
+        return "addr: " + Utils.join(addresses);
     }
 
 }

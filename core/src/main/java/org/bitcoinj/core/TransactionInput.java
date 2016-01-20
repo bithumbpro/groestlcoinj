@@ -41,9 +41,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * to the outputs of another. The exceptions are coinbase transactions, which create new coins.
  */
 public class TransactionInput extends ChildMessage implements Serializable {
+    /** Magic sequence number that indicates there is no sequence number. */
     public static final long NO_SEQUENCE = 0xFFFFFFFFL;
     private static final long serialVersionUID = 2;
     public static final byte[] EMPTY_ARRAY = new byte[0];
+    // Magic outpoint index that indicates the input is in fact unconnected.
+    private static final long UNCONNECTED = 0xFFFFFFFFL;
 
     // Allows for altering transactions after they were broadcast. Tx replacement is currently disabled in the C++
     // client so this is always the UINT_MAX.
@@ -57,16 +60,16 @@ public class TransactionInput extends ChildMessage implements Serializable {
     private byte[] scriptBytes;
     // The Script object obtained from parsing scriptBytes. Only filled in on demand and if the transaction is not
     // coinbase.
-    transient private WeakReference<Script> scriptSig;
+    private transient WeakReference<Script> scriptSig;
     /** Value of the output connected to the input, if known. This field does not participate in equals()/hashCode(). */
     @Nullable
-    private final Coin value;
+    private Coin value;
 
     /**
      * Creates an input that connects to nothing - used only in creation of coinbase transactions.
      */
     public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes) {
-        this(params, parentTransaction, scriptBytes, new TransactionOutPoint(params, NO_SEQUENCE, (Transaction) null));
+        this(params, parentTransaction, scriptBytes, new TransactionOutPoint(params, UNCONNECTED, (Transaction) null));
     }
 
     public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes,
@@ -91,7 +94,11 @@ public class TransactionInput extends ChildMessage implements Serializable {
     TransactionInput(NetworkParameters params, Transaction parentTransaction, TransactionOutput output) {
         super(params);
         long outputIndex = output.getIndex();
-        outpoint = new TransactionOutPoint(params, outputIndex, output.getParentTransaction());
+        if(output.getParentTransaction() != null ) {
+            outpoint = new TransactionOutPoint(params, outputIndex, output.getParentTransaction());
+        } else {
+            outpoint = new TransactionOutPoint(params, output);
+        }
         scriptBytes = EMPTY_ARRAY;
         sequence = NO_SEQUENCE;
         setParent(parentTransaction);
@@ -173,7 +180,6 @@ public class TransactionInput extends ChildMessage implements Serializable {
             maybeParse();
             script = new Script(scriptBytes);
             scriptSig = new WeakReference<Script>(script);
-            return script;
         }
         return script;
     }
@@ -276,10 +282,8 @@ public class TransactionInput extends ChildMessage implements Serializable {
      */
     @Override
     public String toString() {
-        if (isCoinBase())
-            return "TxIn: COINBASE";
         try {
-            return "TxIn for [" + outpoint + "]: " + getScriptSig();
+            return isCoinBase() ? "TxIn: COINBASE" : "TxIn for [" + outpoint + "]: " + getScriptSig();
         } catch (ScriptException e) {
             throw new RuntimeException(e);
         }
@@ -371,6 +375,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
     public void connect(TransactionOutput out) {
         outpoint.fromTx = out.getParentTransaction();
         out.markAsSpent(this);
+        value = out.getValue();
     }
 
     /**

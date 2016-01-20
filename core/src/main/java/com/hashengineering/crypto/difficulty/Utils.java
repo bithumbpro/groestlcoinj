@@ -29,25 +29,6 @@ public class Utils {
         return dDiff;
     }
 
-    public static StoredBlock getLastBlockForAlgo(StoredBlock block, int algo, BlockStore blockStore)
-    {
-        for(;;)
-        {
-            if(block == null || block.getHeader().getPrevBlockHash().equals(Sha256Hash.ZERO_HASH))
-                return null;
-            if(block.getHeader().getAlgo() == algo)
-                return block;
-            try {
-                block = block.getPrev(blockStore);
-            }
-            catch(BlockStoreException x)
-            {
-                return null;
-            }
-        }
-
-    }
-
     public static double getNetworkHashRate(StoredBlock currentBlock, BlockStore blockStore)
     {
         double totalHash = 0.0;
@@ -60,7 +41,7 @@ public class Utils {
         {
             try {
                 block = block.getPrev(blockStore);
-                block = getLastBlockForAlgo(block, currentBlock.getHeader().getAlgo(), blockStore);
+
                 if(block == null)
                     return 0.0;
             }

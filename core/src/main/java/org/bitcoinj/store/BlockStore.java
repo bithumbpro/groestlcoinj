@@ -16,6 +16,7 @@
 
 package org.bitcoinj.store;
 
+import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
 
@@ -59,6 +60,9 @@ public interface BlockStore {
     /** Closes the store. */
     void close() throws BlockStoreException;
 
-    long getMedianTimePast(StoredBlock block) throws BlockStoreException;
-
+    /**
+     * Get the {@link org.bitcoinj.core.NetworkParameters} of this store.
+     * @return The network params.
+     */
+    NetworkParameters getParams();
 }

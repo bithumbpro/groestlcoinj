@@ -39,6 +39,8 @@ import java.util.*;
 import static org.bitcoinj.script.ScriptOpCodes.*;
 import static com.google.common.base.Preconditions.*;
 
+// TODO: Redesign this entire API to be more type safe and organised.
+
 /**
  * <p>Programs embedded inside transactions that control redemption of payments.</p>
  *
@@ -51,6 +53,15 @@ import static com.google.common.base.Preconditions.*;
  * static methods for building scripts.</p>
  */
 public class Script {
+
+    /** Enumeration to encapsulate the type of this script. */
+    public enum ScriptType {
+        // Do NOT change the ordering of the following definitions because their ordinals are stored in databases.
+        NO_TYPE,
+        P2PKH,
+        PUB_KEY,
+        P2SH
+    }
 
     /** Flags to pass to {@link Script#correctlySpends(Transaction, long, Script, Set)}. */
     public enum VerifyFlag {
@@ -93,7 +104,7 @@ public class Script {
     public Script(byte[] programBytes) throws ScriptException {
         program = programBytes;
         parse(programBytes);
-        creationTimeSeconds = Utils.currentTimeSeconds();
+        creationTimeSeconds = 0;
     }
 
     public Script(byte[] programBytes, long creationTimeSeconds) throws ScriptException {
@@ -115,12 +126,7 @@ public class Script {
      */
     @Override
     public String toString() {
-        StringBuilder buf = new StringBuilder();
-        for (ScriptChunk chunk : chunks)
-            buf.append(chunk).append(' ');
-        if (buf.length() > 0)
-            buf.setLength(buf.length() - 1);
-        return buf.toString();
+        return Utils.join(chunks);
     }
 
     /** Returns the serialized program as a newly created byte array. */
@@ -145,16 +151,12 @@ public class Script {
         return Collections.unmodifiableList(chunks);
     }
 
-    private static final ScriptChunk STANDARD_TRANSACTION_SCRIPT_CHUNKS[];
-
-    static {
-        STANDARD_TRANSACTION_SCRIPT_CHUNKS = new ScriptChunk[] {
-            new ScriptChunk(ScriptOpCodes.OP_DUP, null, 0),
-            new ScriptChunk(ScriptOpCodes.OP_HASH160, null, 1),
-            new ScriptChunk(ScriptOpCodes.OP_EQUALVERIFY, null, 23),
-            new ScriptChunk(ScriptOpCodes.OP_CHECKSIG, null, 24),
-        };
-    }
+    private static final ScriptChunk[] STANDARD_TRANSACTION_SCRIPT_CHUNKS = {
+        new ScriptChunk(ScriptOpCodes.OP_DUP, null, 0),
+        new ScriptChunk(ScriptOpCodes.OP_HASH160, null, 1),
+        new ScriptChunk(ScriptOpCodes.OP_EQUALVERIFY, null, 23),
+        new ScriptChunk(ScriptOpCodes.OP_CHECKSIG, null, 24),
+    };
 
     /**
      * <p>To run a script, first we parse it which breaks it up into chunks representing pushes of data or logical
@@ -244,10 +246,16 @@ public class Script {
     }
 
     /**
-     * If a program matches the standard template DUP HASH160 <pubkey hash> EQUALVERIFY CHECKSIG
-     * then this function retrieves the third element, otherwise it throws a ScriptException.<p>
+     * <p>If a program matches the standard template DUP HASH160 &lt;pubkey hash&gt; EQUALVERIFY CHECKSIG
+     * then this function retrieves the third element.
+     * In this case, this is useful for fetching the destination address of a transaction.</p>
+     * 
+     * <p>If a program matches the standard template HASH160 &lt;script hash&gt; EQUAL
+     * then this function retrieves the second element.
+     * In this case, this is useful for fetching the hash of the redeem script of a transaction.</p>
+     * 
+     * <p>Otherwise it throws a ScriptException.</p>
      *
-     * This is useful for fetching the destination address of a transaction.
      */
     public byte[] getPubKeyHash() throws ScriptException {
         if (isSentToAddress())
@@ -281,7 +289,7 @@ public class Script {
             // A large constant followed by an OP_CHECKSIG is the key.
             return chunk0data;
         } else {
-            throw new ScriptException("Script did not match expected form: " + toString());
+            throw new ScriptException("Script did not match expected form: " + this);
         }
     }
 
@@ -464,6 +472,22 @@ public class Script {
         }
 
         throw new IllegalStateException("Could not find matching key " + key.toString() + " in script " + this);
+    }
+
+    /**
+     * Returns a list of the keys required by this script, assuming a multi-sig script.
+     *
+     * @throws ScriptException if the script type is not understood or is pay to address or is P2SH (run this method on the "Redeem script" instead).
+     */
+    public List<ECKey> getPubKeys() {
+        if (!isSentToMultiSig())
+            throw new ScriptException("Only usable for multisig scripts.");
+
+        ArrayList<ECKey> result = Lists.newArrayList();
+        int numKeys = Script.decodeFromOpN(chunks.get(chunks.size() - 2).opcode);
+        for (int i = 0 ; i < numKeys ; i++)
+            result.add(ECKey.fromPublicOnly(chunks.get(1 + i).data));
+        return result;
     }
 
     private int findSigInRedeem(byte[] signatureBytes, Sha256Hash hash) {
@@ -726,7 +750,6 @@ public class Script {
         return Utils.decodeMPI(Utils.reverseBytes(chunk), false);
     }
 
-
     public boolean hasOpCode(int opCode)
     {
         for (ScriptChunk chunk : this.chunks) {
@@ -757,8 +780,13 @@ public class Script {
         
         for (ScriptChunk chunk : script.chunks) {
             boolean shouldExecute = !ifStack.contains(false);
-            
-            if (!chunk.isOpCode()) {
+
+            if (chunk.opcode == OP_0) {
+                if (!shouldExecute)
+                    continue;
+
+                stack.add(new byte[] {});
+            } else if (!chunk.isOpCode()) {
                 if (chunk.data.length > MAX_SCRIPT_ELEMENT_SIZE)
                     throw new ScriptException("Attempted to push a data string larger than 520 bytes");
                 
@@ -1201,11 +1229,7 @@ public class Script {
                 case OP_SHA256:
                     if (stack.size() < 1)
                         throw new ScriptException("Attempted OP_SHA256 on an empty stack");
-                    try {
-                        stack.add(MessageDigest.getInstance("SHA-256").digest(stack.pollLast()));
-                    } catch (NoSuchAlgorithmException e) {
-                        throw new RuntimeException(e);  // Cannot happen.
-                    }
+                    stack.add(Sha256Hash.hash(stack.pollLast()));
                     break;
                 case OP_HASH160:
                     if (stack.size() < 1)
@@ -1215,7 +1239,6 @@ public class Script {
                 case OP_HASH256:
                     if (stack.size() < 1)
                         throw new ScriptException("Attempted OP_SHA256 on an empty stack");
-                    //stack.add(Utils.doubleDigest(stack.pollLast()));
                     stack.add(Groestl.digest(stack.pollLast()));
                     break;
                 case OP_CODESEPARATOR:
@@ -1462,6 +1485,22 @@ public class Script {
         if (program != null)
             return program;
         return getProgram();
+    }
+
+    /**
+     * Get the {@link org.bitcoinj.script.Script.ScriptType}.
+     * @return The script type.
+     */
+    public ScriptType getScriptType() {
+        ScriptType type = ScriptType.NO_TYPE;
+        if (isSentToAddress()) {
+            type = ScriptType.P2PKH;
+        } else if (isSentToRawPubKey()) {
+            type = ScriptType.PUB_KEY;
+        } else if (isPayToScriptHash()) {
+            type = ScriptType.P2SH;
+        }
+        return type;
     }
 
     @Override

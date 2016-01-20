@@ -1,5 +1,6 @@
 /*
  * Copyright 2013 Google Inc.
+ * Copyright 2015 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +17,17 @@
 
 package org.bitcoinj.params;
 
-
 import org.bitcoinj.core.*;
+import org.bitcoinj.net.discovery.*;
 
-import static com.google.common.base.Preconditions.checkState;
+import java.net.*;
+
+import static com.google.common.base.Preconditions.*;
 
 /**
  * Parameters for the main production network on which people trade goods and services.
  */
-public class MainNetParams extends NetworkParameters {
+public class MainNetParams extends AbstractBitcoinNetParams {
     public MainNetParams() {
         super();
         interval = INTERVAL;
@@ -54,6 +57,8 @@ public class MainNetParams extends NetworkParameters {
         CoinDefinition.initCheckpoints(checkpoints);
 
         dnsSeeds = CoinDefinition.dnsSeeds;
+        httpSeeds = CoinDefinition.httpSeeds;
+        addrSeeds = CoinDefinition.addrSeeds;
 
     }
 
