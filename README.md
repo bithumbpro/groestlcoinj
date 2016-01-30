@@ -3,7 +3,7 @@ Coverage status: [![Coverage Status](https://coveralls.io/repos/bitcoinj/bitcoin
 
 ### Welcome to groestlcoinj
 
-The groestlcoinj library is a Java implementation of the GroestlCoin protocol, which allows it to maintain a wallet and send/receive transactions without needing a local copy of Groestlcoin Core. It comes with full documentation and some example apps showing how to use it.
+The groestlcoinj library is a Java implementation of the Groestlcoin protocol, which allows it to maintain a wallet and send/receive transactions without needing a local copy of Groestlcoin Core. It comes with full documentation and some example apps showing how to use it.
 
 ### Technologies
 

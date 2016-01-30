@@ -1,5 +1,8 @@
 package org.bitcoinj.core;
 
+import com.hashengineering.crypto.blockexplorer.BlockExplorer;
+import com.hashengineering.crypto.blockexplorer.BlockExplorers;
+import com.hashengineering.crypto.blockexplorer.CryptoIDExplorer;
 import org.bitcoinj.net.discovery.HttpDiscovery;
 
 import java.math.BigInteger;
@@ -16,7 +19,7 @@ import java.util.Map;
 public class CoinDefinition {
 
 
-    public static final String coinName = "GroestlCoin";
+    public static final String coinName = "Groestlcoin";
     public static final String coinTicker = "GRS";
     public static final String coinURIScheme = "groestlcoin";
     public static final String cryptsyMarketId = "26";
@@ -27,6 +30,16 @@ public class CoinDefinition {
     public static final String PATTERN_PRIVATE_KEY_START_COMPRESSED_TESTNET = "c";
 
     public static String lowerCaseCoinName() { return coinName.toLowerCase(); }
+
+    static final BlockExplorers blockExplorers = new BlockExplorers();
+    static public final BlockExplorer defaultExplorer;
+    static public final BlockExplorer unspentExplorer;
+    static {
+        blockExplorers.add(new CryptoIDExplorer("https://chainz.cryptoid.info/grs/"));
+
+        defaultExplorer = blockExplorers.getExplorer("https://chainz.cryptoid.info/grs/");
+        unspentExplorer = blockExplorers.getExplorer("https://chainz.cryptoid.info/grs/");
+    }
 
     public static final String BLOCKEXPLORER_BASE_URL_PROD = "https://chainz.cryptoid.info/grs/";
     public static final String BLOCKEXPLORER_ADDRESS_PATH = "address.dws?";
