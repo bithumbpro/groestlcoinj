@@ -28,7 +28,7 @@
     <artifactId>groestlcoinj</artifactId>
 
     <name>groestlcoinj</name>
-    <description>A Java GroestlCoin library</description>
+    <description>A Java Groestlcoin library</description>
 
     <packaging>jar</packaging>
 
