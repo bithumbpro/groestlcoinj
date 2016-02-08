@@ -21,6 +21,7 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
 import com.google.bitcoin.crypto.EncryptedPrivateKey;
 import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterGroestl;
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.wallet.WalletTransaction;
@@ -189,8 +190,8 @@ public class WalletProtobufSerializer {
         } else {
             // The wallet is encrypted.
             walletBuilder.setEncryptionType(keyCrypter.getUnderstoodEncryptionType());
-            if (keyCrypter instanceof KeyCrypterScrypt) {
-                KeyCrypterScrypt keyCrypterScrypt = (KeyCrypterScrypt) keyCrypter;
+            if (keyCrypter instanceof KeyCrypterGroestl) {
+                KeyCrypterGroestl keyCrypterScrypt = (KeyCrypterGroestl) keyCrypter;
                 walletBuilder.setEncryptionParameters(keyCrypterScrypt.getScryptParameters());
             } else {
                 // Some other form of encryption has been specified that we do not know how to persist.
@@ -395,7 +396,8 @@ public class WalletProtobufSerializer {
         // Read the scrypt parameters that specify how encryption and decryption is performed.
         if (walletProto.hasEncryptionParameters()) {
             Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
-            wallet.setKeyCrypter(new KeyCrypterScrypt(encryptionParameters));
+            //wallet.setKeyCrypter(new KeyCrypterScrypt(encryptionParameters));
+            wallet.setKeyCrypter(new KeyCrypterGroestl(encryptionParameters));
         }
 
         if (walletProto.hasDescription()) {
