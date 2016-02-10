@@ -13,7 +13,7 @@ import java.util.Map;
 public class CoinDefinition {
 
 
-    public static final String coinName = "GroestlCoin";
+    public static final String coinName = "Groestlcoin";
     public static final String coinTicker = "GRS";
     public static final String coinURIScheme = "groestlcoin";
     public static final String cryptsyMarketId = "26";
