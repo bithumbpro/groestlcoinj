@@ -28,6 +28,10 @@ import static com.google.common.base.Preconditions.*;
  * Parameters for the main production network on which people trade goods and services.
  */
 public class MainNetParams extends AbstractBitcoinNetParams {
+    public static final int MAINNET_MAJORITY_WINDOW = 1000;
+    public static final int MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED = 950;
+    public static final int MAINNET_MAJORITY_ENFORCE_BLOCK_UPGRADE = 750;
+
     public MainNetParams() {
         super();
         interval = INTERVAL;
@@ -48,6 +52,10 @@ public class MainNetParams extends AbstractBitcoinNetParams {
         genesisBlock.setTime(CoinDefinition.genesisBlockTime);
         genesisBlock.setNonce(CoinDefinition.genesisBlockNonce);
 
+        majorityEnforceBlockUpgrade = MAINNET_MAJORITY_ENFORCE_BLOCK_UPGRADE;
+        majorityRejectBlockOutdated = MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED;
+        majorityWindow = MAINNET_MAJORITY_WINDOW;
+
         id = ID_MAINNET;
         subsidyDecreaseBlockCount = CoinDefinition.subsidyDecreaseBlockCount;
         spendableCoinbaseDepth = CoinDefinition.spendableCoinbaseDepth;
@@ -62,7 +70,6 @@ public class MainNetParams extends AbstractBitcoinNetParams {
         dnsSeeds = CoinDefinition.dnsSeeds;
         httpSeeds = CoinDefinition.httpSeeds;
         addrSeeds = CoinDefinition.addrSeeds;
-
     }
 
     private static MainNetParams instance;

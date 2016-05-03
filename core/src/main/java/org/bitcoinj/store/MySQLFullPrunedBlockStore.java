@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.bitcoinj.store;
 
 import org.bitcoinj.core.NetworkParameters;
@@ -39,16 +40,16 @@ public class MySQLFullPrunedBlockStore extends DatabaseFullPrunedBlockStore {
             ")\n";
 
     private static final String CREATE_HEADERS_TABLE = "CREATE TABLE headers (\n" +
-            "    hash binary(28) NOT NULL,\n" +
-            "    chainwork binary(12) NOT NULL,\n" +
+            "    hash varbinary(28) NOT NULL,\n" +
+            "    chainwork varbinary(12) NOT NULL,\n" +
             "    height integer NOT NULL,\n" +
-            "    header binary(80) NOT NULL,\n" +
+            "    header varbinary(80) NOT NULL,\n" +
             "    wasundoable tinyint(1) NOT NULL,\n" +
             "    CONSTRAINT headers_pk PRIMARY KEY (hash) USING BTREE \n" +
             ")";
 
     private static final String CREATE_UNDOABLE_TABLE = "CREATE TABLE undoableblocks (\n" +
-            "    hash binary(28) NOT NULL,\n" +
+            "    hash varbinary(28) NOT NULL,\n" +
             "    height integer NOT NULL,\n" +
             "    txoutchanges mediumblob,\n" +
             "    transactions mediumblob,\n" +
@@ -56,7 +57,7 @@ public class MySQLFullPrunedBlockStore extends DatabaseFullPrunedBlockStore {
             ")\n";
 
     private static final String CREATE_OPEN_OUTPUT_TABLE = "CREATE TABLE openoutputs (\n" +
-            "    hash binary(32) NOT NULL,\n" +
+            "    hash varbinary(32) NOT NULL,\n" +
             "    `index` integer NOT NULL,\n" +
             "    height integer NOT NULL,\n" +
             "    value bigint NOT NULL,\n" +

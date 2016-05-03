@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 import com.google.common.base.Objects;
+import com.google.common.primitives.Ints;
 import com.google.common.primitives.UnsignedBytes;
 
 /**
@@ -55,8 +56,7 @@ public class VersionedChecksummedBytes implements Serializable, Cloneable, Compa
      * Returns the base-58 encoded String representation of this
      * object, including version and checksum bytes.
      */
-    @Override
-    public String toString() {
+    public final String toBase58() {
         // A stringified buffer is:
         //   1 byte version + data bytes + 4 bytes check code (a truncated hash)
         byte[] addressBytes = new byte[1 + bytes.length + 4];
@@ -65,6 +65,11 @@ public class VersionedChecksummedBytes implements Serializable, Cloneable, Compa
         byte[] checksum = Groestl.digest(addressBytes, 0, bytes.length + 1);
         System.arraycopy(checksum, 0, addressBytes, bytes.length + 1, 4);
         return Base58.encode(addressBytes);
+    }
+
+    @Override
+    public String toString() {
+        return toBase58();
     }
 
     @Override
@@ -77,8 +82,7 @@ public class VersionedChecksummedBytes implements Serializable, Cloneable, Compa
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         VersionedChecksummedBytes other = (VersionedChecksummedBytes) o;
-        return this.version == other.version
-                && Arrays.equals(this.bytes, other.bytes);
+        return this.version == other.version && Arrays.equals(this.bytes, other.bytes);
     }
 
     /**
@@ -100,13 +104,8 @@ public class VersionedChecksummedBytes implements Serializable, Cloneable, Compa
      */
     @Override
     public int compareTo(VersionedChecksummedBytes o) {
-        int versionCompare = Integer.valueOf(this.version).compareTo(Integer.valueOf(o.version));  // JDK 6 way
-        if (versionCompare == 0) {
-            // Would there be a performance benefit to caching the comparator?
-            return UnsignedBytes.lexicographicalComparator().compare(this.bytes, o.bytes);
-        } else {
-            return versionCompare;
-        }
+        int result = Ints.compare(this.version, o.version);
+        return result != 0 ? result : UnsignedBytes.lexicographicalComparator().compare(this.bytes, o.bytes);
     }
 
     /**

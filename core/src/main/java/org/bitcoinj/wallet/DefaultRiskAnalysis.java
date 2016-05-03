@@ -25,7 +25,6 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.core.Wallet;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.ScriptChunk;
 import org.slf4j.Logger;
@@ -84,6 +83,12 @@ public class DefaultRiskAnalysis implements RiskAnalysis {
         if (tx.getConfidence().getSource() == TransactionConfidence.Source.SELF)
             return Result.OK;
 
+        // We consider transactions that opt into replace-by-fee at risk of double spending.
+        if (tx.isOptInFullRBF()) {
+            nonFinal = tx;
+            return Result.NON_FINAL;
+        }
+
         if (wallet == null)
             return null;
 
@@ -103,6 +108,7 @@ public class DefaultRiskAnalysis implements RiskAnalysis {
                 return Result.NON_FINAL;
             }
         }
+
         return Result.OK;
     }
 
@@ -120,7 +126,7 @@ public class DefaultRiskAnalysis implements RiskAnalysis {
     }
 
     /**
-     * <p>Checks if a transaction is considered "standard" by the reference client's IsStandardTx and AreInputsStandard
+     * <p>Checks if a transaction is considered "standard" by Bitcoin Core's IsStandardTx and AreInputsStandard
      * functions.</p>
      *
      * <p>Note that this method currently only implements a minimum of checks. More to be added later.</p>
