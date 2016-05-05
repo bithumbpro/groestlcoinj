@@ -6,12 +6,12 @@
     <parent>
         <groupId>org.bitcoinj</groupId>
         <artifactId>groestlcoinj-parent</artifactId>
-        <version>0.14-SNAPSHOT</version>
+        <version>0.14</version>
     </parent>
 
     <artifactId>wallettemplate</artifactId>
 
-    <name>bitcoinj Wallet-Template</name>
+    <name>groestlcoinj Wallet-Template</name>
 
     <build>
         <plugins>
