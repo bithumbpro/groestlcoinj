@@ -60,7 +60,8 @@ public class VersionTally {
      * @param version the block version to add.
      */
     public void add(final long version) {
-        versionWindow[versionWriteHead++] = version;
+
+        versionWindow[versionWriteHead++] = version == 112 ? 1 :version;
         if (versionWriteHead == versionWindow.length) {
             versionWriteHead = 0;
         }
