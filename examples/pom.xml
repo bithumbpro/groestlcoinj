@@ -20,7 +20,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
 
-        <groupId>org.bitcoinj</groupId>
+        <groupId>org.groestlcoinj</groupId>
         <artifactId>groestlcoinj-parent</artifactId>
         <version>0.14</version>
     </parent>
@@ -33,7 +33,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.bitcoinj</groupId>
+            <groupId>org.groestlcoinj</groupId>
             <artifactId>groestlcoinj-core</artifactId>
             <version>${project.parent.version}</version>
         </dependency>

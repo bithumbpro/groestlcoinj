@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.bitcoinj</groupId>
+  <groupId>org.groestlcoinj</groupId>
   <artifactId>groestlcoinj-parent</artifactId>
   <version>0.14</version>
   <packaging>pom</packaging>
@@ -26,7 +26,7 @@
     <url>scm:git:https://github.com/HashEngineering/groestlcoinj</url>
   </scm>
 
-  <name>bitcoinj Parent</name>
+  <name>groestlcoinj Parent</name>
   <description>Provides the common configuration for the BitCoinJ modules</description>
   <url>http://www.bitcoinj.org/</url>
 
@@ -40,26 +40,31 @@
   </licenses>
 
   <issueManagement>
-    <system>Google Code</system>
-    <url>http://code.google.com/p/digitalcoinj/issues/list</url>
+    <system>GitHub</system>
+    <url>https://github.com/HashEngineering/groestlcoinj/issues</url>
   </issueManagement>
 
   <mailingLists>
     <mailingList>
-      <name>digitalcoinj Google Group</name>
+      <name>groestlcoinj Google Group</name>
       <post>https://groups.google.com/forum/#!forum/digitalcoinj</post>
     </mailingList>
   </mailingLists>
 
   <distributionManagement>
-    <snapshotRepository>
+    <!--snapshotRepository>
       <id>ossrh</id>
       <url>https://oss.sonatype.org/content/repositories/snapshots</url>
     </snapshotRepository>
     <repository>
       <id>ossrh</id>
       <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-    </repository>
+    </repository-->
+          <repository>
+              <id>bintray-hashengineering-groestlcoin</id>
+              <name>hashengineering-groestlcoin</name>
+              <url>https://api.bintray.com/maven/hashengineering/groestlcoin/org.groestlcoinj/;publish=1</url>
+          </repository>
   </distributionManagement>
 
 
@@ -77,7 +82,7 @@
         </configuration>
       </plugin>
 
-      <plugin>
+      <!--plugin>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
@@ -91,9 +96,9 @@
         <configuration>
           <notimestamp>true</notimestamp>
         </configuration>
-      </plugin>
+      </plugin-->
 
-      <plugin>
+      <!--plugin>
         <groupId>org.sonatype.plugins</groupId>
         <artifactId>nexus-staging-maven-plugin</artifactId>
         <version>1.6.5</version>
@@ -103,7 +108,7 @@
             <nexusUrl>https://oss.sonatype.org/</nexusUrl>
             <autoReleaseAfterClose>false</autoReleaseAfterClose>
         </configuration>
-      </plugin>
+      </plugin-->
     </plugins>
     <pluginManagement>
       <plugins>
