@@ -20,7 +20,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.bitcoinj</groupId>
+        <groupId>org.groestlcoinj</groupId>
         <artifactId>groestlcoinj-parent</artifactId>
         <version>0.13.4</version>
     </parent>
@@ -356,7 +356,7 @@
                             <artifactItems>
                                 <artifactItem>
                                     <outputDirectory>target/test-classes/</outputDirectory>
-                                    <groupId>org.bitcoinj</groupId>
+                                    <groupId>org.groestlcoinj</groupId>
                                     <artifactId>groestlcoinj-core</artifactId>
                                     <version>${project.version}</version>
                                 </artifactItem>
