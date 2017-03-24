@@ -121,13 +121,14 @@ public class CoinDefinition {
 
     //net.cpp strDNSSeed
     static public String[] dnsSeeds = new String[] {
+            "groestlsight.groestlcoin.org",
             "groestlcoin.net",
             "groestlcoin.org",
             "electrum1.groestlcoin.org",
             "electrum2.groestlcoin.org",
             "jswallet.groestlcoin.org",
-            "193.136.98.184",
-            "88.198.69.99"
+            "electrum10.groestlcoin.org",
+            "electrum5.groestlcoin.org",
 
     };
 
