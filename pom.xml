@@ -41,13 +41,13 @@
 
   <issueManagement>
     <system>GitHub</system>
-    <url>https://github.com/HashEngineering/groestlcoinj/issues</url>
+    <url>https://github.com/Groestlcoin/groestlcoinj/issues</url>
   </issueManagement>
 
   <mailingLists>
     <mailingList>
       <name>groestlcoinj Google Group</name>
-      <post>https://groups.google.com/forum/#!forum/digitalcoinj</post>
+      <post>https://groups.google.com/forum/#!forum/groestlcoinj</post>
     </mailingList>
   </mailingLists>
 
@@ -82,7 +82,7 @@
         </configuration>
       </plugin>
 
-      <!--plugin>
+      <plugin>
         <artifactId>maven-jar-plugin</artifactId>
         <configuration>
           <archive>
@@ -96,7 +96,7 @@
         <configuration>
           <notimestamp>true</notimestamp>
         </configuration>
-      </plugin-->
+      </plugin>
 
       <!--plugin>
         <groupId>org.sonatype.plugins</groupId>
@@ -179,7 +179,7 @@
         <artifactId>slf4j-api</artifactId>
         <version>1.7.7</version>
       </dependency>
-      <!-- digitalcoinj consumers are expected to provide their own SLF4J adapters
+      <!-- groestlcoinj consumers are expected to provide their own SLF4J adapters
     such as logback, slf4j-log4j12, slf4j-jcl and so on
     see http://www.slf4j.org/faq.html -->
       <dependency>

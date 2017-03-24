@@ -48,4 +48,24 @@
             <version>1.3.167</version>
         </dependency>
     </dependencies>
+    <build>
+            <plugins>
+
+
+                <!-- Generate source and javadoc jars: Maven Central requires this -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>jar-no-fork</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+        </plugins>
+    </build>
 </project>
