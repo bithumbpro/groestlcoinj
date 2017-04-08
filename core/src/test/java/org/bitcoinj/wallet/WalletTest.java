@@ -78,8 +78,6 @@ public class WalletTest extends TestWithWallet {
     private static final CharSequence PASSWORD1 = "my helicopter contains eels";
     private static final CharSequence WRONG_PASSWORD = "nothing noone nobody nowhere";
 
-    private SecureRandom secureRandom = new SecureRandom();
-
     private final Address OTHER_ADDRESS = new ECKey().toAddress(PARAMS);
 
     @Before
@@ -528,6 +526,16 @@ public class WalletTest extends TestWithWallet {
         // Change is confirmed. We started with 5.50 so we should have 4.50 left.
         Coin v4 = valueOf(4, 50);
         assertEquals(v4, wallet.getBalance(Wallet.BalanceType.AVAILABLE));
+    }
+
+    @Test
+    public void balanceWithIdenticalOutputs() {
+        assertEquals(Coin.ZERO, wallet.getBalance(BalanceType.ESTIMATED));
+        Transaction tx = new Transaction(PARAMS);
+        tx.addOutput(Coin.COIN, myAddress);
+        tx.addOutput(Coin.COIN, myAddress); // identical to the above
+        wallet.addWalletTransaction(new WalletTransaction(Pool.UNSPENT, tx));
+        assertEquals(Coin.COIN.plus(Coin.COIN), wallet.getBalance(BalanceType.ESTIMATED));
     }
 
     // Intuitively you'd expect to be able to create a transaction with identical inputs and outputs and get an
@@ -2070,9 +2078,8 @@ public class WalletTest extends TestWithWallet {
 
         // Try added an ECKey that was encrypted with a differenct ScryptParameters (i.e. a non-homogenous key).
         // This is not allowed as the ScryptParameters is stored at the Wallet level.
-        byte[] salt = new byte[KeyCrypterScrypt.SALT_LENGTH];
-        secureRandom.nextBytes(salt);
-        Protos.ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder().setSalt(ByteString.copyFrom(salt));
+        Protos.ScryptParameters.Builder scryptParametersBuilder = Protos.ScryptParameters.newBuilder()
+                .setSalt(ByteString.copyFrom(KeyCrypterScrypt.randomSalt()));
         Protos.ScryptParameters scryptParameters = scryptParametersBuilder.build();
         KeyCrypter keyCrypterDifferent = new KeyCrypterScrypt(scryptParameters);
         ECKey ecKeyDifferent = new ECKey();
@@ -2137,6 +2144,17 @@ public class WalletTest extends TestWithWallet {
         Coin messagePrice = Coin.ZERO;
         Script script = ScriptBuilder.createOpReturnScript("hello world!".getBytes());
         tx.addOutput(messagePrice, script);
+        SendRequest request = SendRequest.forTx(tx);
+        request.ensureMinRequiredFee = true;
+        wallet.completeTx(request);
+    }
+
+    @Test
+    public void opReturnMaxBytes() throws Exception {
+        receiveATransaction(wallet, myAddress);
+        Transaction tx = new Transaction(PARAMS);
+        Script script = ScriptBuilder.createOpReturnScript(new byte[80]);
+        tx.addOutput(Coin.ZERO, script);
         SendRequest request = SendRequest.forTx(tx);
         request.ensureMinRequiredFee = true;
         wallet.completeTx(request);

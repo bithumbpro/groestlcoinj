@@ -28,8 +28,8 @@ import static com.google.common.base.Preconditions.*;
  * Parameters for the main production network on which people trade goods and services.
  */
 public class MainNetParams extends AbstractBitcoinNetParams {
-    public static final int MAINNET_MAJORITY_WINDOW = 1000;
-    public static final int MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED = 950;
+    public static final int MAINNET_MAJORITY_WINDOW = 2016;
+    public static final int MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED = 1912;
     public static final int MAINNET_MAJORITY_ENFORCE_BLOCK_UPGRADE = 750;
 
     public MainNetParams() {
@@ -70,6 +70,7 @@ public class MainNetParams extends AbstractBitcoinNetParams {
         dnsSeeds = CoinDefinition.dnsSeeds;
         httpSeeds = CoinDefinition.httpSeeds;
         addrSeeds = CoinDefinition.addrSeeds;
+
     }
 
     private static MainNetParams instance;

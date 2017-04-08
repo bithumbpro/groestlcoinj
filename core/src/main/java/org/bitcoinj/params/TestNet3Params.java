@@ -55,6 +55,7 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
         genesisBlock.setDifficultyTarget(CoinDefinition.testnetGenesisBlockDifficultyTarget);
         genesisBlock.setNonce(CoinDefinition.testnetGenesisBlockNonce);
         spendableCoinbaseDepth = 100;
+
         subsidyDecreaseBlockCount = CoinDefinition.subsidyDecreaseBlockCount;
          String genesisHash = genesisBlock.getHashAsString();
 

@@ -160,8 +160,18 @@ public class Peer extends PeerSocketHandler {
     private final SettableFuture<Peer> connectionOpenFuture = SettableFuture.create();
     private final SettableFuture<Peer> outgoingVersionHandshakeFuture = SettableFuture.create();
     private final SettableFuture<Peer> incomingVersionHandshakeFuture = SettableFuture.create();
-    private final ListenableFuture<List<Peer>> versionHandshakeFuture = Futures
-            .allAsList(outgoingVersionHandshakeFuture, incomingVersionHandshakeFuture);
+    private final ListenableFuture<Peer> versionHandshakeFuture = Futures.transform(
+            Futures.allAsList(outgoingVersionHandshakeFuture, incomingVersionHandshakeFuture),
+            new Function<List<Peer>, Peer>() {
+
+                @Override
+                @Nullable
+                public Peer apply(@Nullable List<Peer> peers) {
+                    checkNotNull(peers);
+                    checkState(peers.size() == 2 && peers.get(0) == peers.get(1));
+                    return peers.get(0);
+                }
+            });
 
     /**
      * <p>Construct a peer that reads/writes from the given block chain.</p>
@@ -436,7 +446,7 @@ public class Peer extends PeerSocketHandler {
         return connectionOpenFuture;
     }
 
-    public ListenableFuture<List<Peer>> getVersionHandshakeFuture() {
+    public ListenableFuture<Peer> getVersionHandshakeFuture() {
         return versionHandshakeFuture;
     }
 
@@ -695,7 +705,9 @@ public class Peer extends PeerSocketHandler {
                 } else {
                     lock.lock();
                     try {
-                        log.info("Passed the fast catchup time, discarding {} headers and requesting full blocks",
+                        log.info(
+                                "Passed the fast catchup time ({}) at height {}, discarding {} headers and requesting full blocks",
+                                Utils.dateTimeFormat(fastCatchupTimeSecs * 1000), blockChain.getBestChainHeight() + 1,
                                 m.getBlockHeaders().size() - i);
                         this.downloadBlockBodies = true;
                         // Prevent this request being seen as a duplicate.
@@ -947,7 +959,7 @@ public class Peer extends PeerSocketHandler {
             // Start the operation.
             sendMessage(getdata);
         } catch (Exception e) {
-            log.error("{}: Couldn't send getdata in downloadDependencies({})", this, tx.getHash());
+            log.error("{}: Couldn't send getdata in downloadDependencies({})", this, tx.getHash(), e);
             resultFuture.setException(e);
             return resultFuture;
         } finally {
