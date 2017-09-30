@@ -153,11 +153,11 @@ public abstract class AbstractBitcoinNetParams extends NetworkParameters {
         return true;
     }
 
-    private void verifyDifficulty(BigInteger calcDiff, StoredBlock storedPrev, Block nextBlock)
+    protected void verifyDifficulty(BigInteger calcDiff, StoredBlock storedPrev, Block nextBlock)
     {
-        if (calcDiff.compareTo(CoinDefinition.proofOfWorkLimit) > 0) {
-            log.info("Difficulty hit proof of work limit: {}", calcDiff.toString(16));
-            calcDiff = CoinDefinition.proofOfWorkLimit;
+        if (calcDiff.compareTo(maxTarget) > 0) {
+            //log.info("Difficulty hit proof of work limit: {}", calcDiff.toString(16));
+            calcDiff = maxTarget;
         }
         int accuracyBytes = (int) (nextBlock.getDifficultyTarget() >>> 24) - 3;
         BigInteger receivedDifficulty = nextBlock.getDifficultyTargetAsInteger();
@@ -171,7 +171,7 @@ public abstract class AbstractBitcoinNetParams extends NetworkParameters {
                     receivedDifficulty.toString(16) + " vs " + calcDiff.toString(16));
     }
 
-    private void DarkGravityWave3(final StoredBlock storedPrev, final Block nextBlock,
+    protected void DarkGravityWave3(final StoredBlock storedPrev, final Block nextBlock,
                                   final BlockStore blockStore) {
         /* current difficulty formula, darkcoin - DarkGravity v3, written by Evan Duffield - evan@darkcoin.io */
         StoredBlock BlockLastSolved = storedPrev;
@@ -237,7 +237,7 @@ public abstract class AbstractBitcoinNetParams extends NetworkParameters {
         verifyDifficulty(bnNew, storedPrev, nextBlock);
 
     }
-    private void DarkGravityWave(final StoredBlock storedPrev, final Block nextBlock,
+    protected void DarkGravityWave(final StoredBlock storedPrev, final Block nextBlock,
                                  final BlockStore blockStore) {
     /* current difficulty formula, limecoin - DarkGravity, written by Evan Duffield - evan@limecoin.io */
         StoredBlock BlockLastSolved = storedPrev;
@@ -342,21 +342,10 @@ public abstract class AbstractBitcoinNetParams extends NetworkParameters {
     public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
                                            final BlockStore blockStore) throws VerificationException, BlockStoreException {
 
-        if (this.getId().equals(NetworkParameters.ID_TESTNET))
-        {//test net, DGWv3 since block 10
-            if (storedPrev.getHeight() >= (10 - 1))
-            {
+        if (storedPrev.getHeight() >= (100000 - 1))
+        {
                 DarkGravityWave3(storedPrev, nextBlock, blockStore);
                 return;
-            }
-        }
-        else
-        {//main net, DGWv3 since block 100,000
-            if (storedPrev.getHeight() >= (100000 - 1))
-            {
-                DarkGravityWave3(storedPrev, nextBlock, blockStore);
-                return;
-            }
         }
 
         DarkGravityWave(storedPrev, nextBlock, blockStore);
