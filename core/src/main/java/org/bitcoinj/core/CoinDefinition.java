@@ -171,10 +171,10 @@ public class CoinDefinition {
     public static final int testnetAddressHeader = 111;             //base58.h CBitcoinAddress::PUBKEY_ADDRESS_TEST
     public static final int testnetp2shHeader = 196;             //base58.h CBitcoinAddress::SCRIPT_ADDRESS_TEST
     public static final long testnetPacketMagic = 0x0b110907;      //0xfc, 0xc1, 0xb7, 0xdc
-    public static final String testnetGenesisHash = "00000b94ee7f94431dad6f1c72cabc18b6923a4fa648be1002938874deb4a265";
-    static public long testnetGenesisBlockDifficultyTarget = (0x1e0fffffL);         //main.cpp: LoadBlockIndex
-    static public long testnetGenesisBlockTime = 1395342913L;                       //main.cpp: LoadBlockIndex
-    static public long testnetGenesisBlockNonce = (873629);                         //main.cpp: LoadBlockIndex
+    public static final String testnetGenesisHash = "000000ffbb50fc9898cdd36ec163e6ba23230164c0052a28876255b7dcf2cd36";
+    static public long testnetGenesisBlockDifficultyTarget = (0x1e00ffffL);         //main.cpp: LoadBlockIndex
+    static public long testnetGenesisBlockTime = 1440000002L;                       //main.cpp: LoadBlockIndex
+    static public long testnetGenesisBlockNonce = (6556309);                         //main.cpp: LoadBlockIndex
 
     //main.cpp GetBlockValue(height, fee)
     public static final Coin GetBlockReward(int height)
@@ -256,10 +256,11 @@ public class CoinDefinition {
 
     public static int subsidyDecreaseBlockCount = 4730400;     //main.cpp GetBlockValue(height, fee)
 
-    public static BigInteger proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);  //main.cpp bnProofOfWorkLimit (~uint256(0) >> 20); // digitalcoin: starting difficulty is 1 / 2^12
+    public static BigInteger proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);  //main.cpp bnProofOfWorkLimit (~uint256(0) >> 20); // groestlcoin: starting difficulty is 1 / 2^12
 
     static public String[] testnetDnsSeeds = new String[] {
-          "not supported"
+            "testnet1.groestlcoin.org",
+            "testnet2.groestlcoin.org"
     };
     //from main.h: CAlert::CheckSignature
     public static final String SATOSHI_KEY = "04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284";
