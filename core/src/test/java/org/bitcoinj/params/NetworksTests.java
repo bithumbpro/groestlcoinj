@@ -63,6 +63,12 @@ public class NetworksTests {
             family = "vpncoin";
         }
     }
+    class GridcoinDummy extends MainNetParams {
+        GridcoinDummy() {
+            super();
+            family = "gridcoin";
+        }
+    }
     class ClamsDummy extends MainNetParams {
         ClamsDummy() {
             super();
@@ -78,6 +84,8 @@ public class NetworksTests {
         }
     }
 
+
+
     @Test
     public void networkFamily() throws Exception {
         assertEquals(Networks.Family.PEERCOIN, Networks.getFamily(new PeercoinDummy()));
@@ -89,6 +97,7 @@ public class NetworksTests {
         assertEquals(Networks.Family.VPNCOIN, Networks.getFamily(new VpncoinDummy()));
         assertEquals(Networks.Family.CLAMS, Networks.getFamily(new ClamsDummy()));
         assertEquals(Networks.Family.SOLARCOIN, Networks.getFamily(new SolarcoinDummy()));
+        assertEquals(Networks.Family.GRIDCOIN, Networks.getFamily(new GridcoinDummy()));
     }
 
     @Test
@@ -118,6 +127,11 @@ public class NetworksTests {
         tx = new Transaction(new VpncoinDummy(), Hex.decode("0100000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000030a0b0c"));
         assertEquals("db3259e628ecf946ab2015cca6b668d701d00e29b8bb2028fb40e40de4debabd", tx.getHashAsString());
 
+        tx = makeTx(new GridcoinDummy());
+        assertTxEquals(tx, "0100000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac0000000000");
+        tx = new Transaction(new GridcoinDummy(), Hex.decode("0100000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000030a0b0c"));
+        assertEquals("db3259e628ecf946ab2015cca6b668d701d00e29b8bb2028fb40e40de4debabd", tx.getHashAsString());
+
         tx = makeTx(new ClamsDummy());
         assertTxEquals(tx, "0200000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac0000000000");
         tx.setVersion(1);
@@ -131,8 +145,10 @@ public class NetworksTests {
         assertTxEquals(tx, "02000000000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000");
         tx.setVersion(1);
         assertTxEquals(tx, "01000000000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000");
-        tx = new Transaction(new SolarcoinDummy(), Hex.decode("03000000000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000030a0b0c"));
-        assertEquals("0c75ddb96f975974a28420e8d9302dc0b245be0101d5e865f7e297c662ca7f3b", tx.getHashAsString());
+        tx.setVersion(4);
+        assertTxEquals(tx, "0400000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000");
+        tx = new Transaction(new SolarcoinDummy(), Hex.decode("0400000099999999000100e1f505000000001976a914000000000000000000000000000000000000000088ac00000000030a0b0c"));
+        assertEquals("afd08d2ddc3a17bf60ab0c6d577050483bfe03cdd413050da81eff1a48e388c7", tx.getHashAsString());
     }
 
     private void assertTxEquals(Transaction tx, String expectedTx) {
