@@ -17,7 +17,8 @@
 package org.bitcoinj.core;
 
 import org.bitcoinj.script.Script;
-import org.bitcoinj.wallet.KeyChainEventListener;
+import org.bitcoinj.wallet.listeners.KeyChainEventListener;
+import org.bitcoinj.wallet.Wallet;
 
 import java.util.List;
 

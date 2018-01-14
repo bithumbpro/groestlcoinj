@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2014 Kosta Korenkov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,15 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.bitcoinj.signers;
 
+import java.util.EnumSet;
 import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.ScriptException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.Script;
+import org.bitcoinj.script.ScriptException;
+import org.bitcoinj.script.Script.VerifyFlag;
 import org.bitcoinj.wallet.KeyBag;
 import org.bitcoinj.wallet.RedeemData;
 import org.slf4j.Logger;
@@ -34,13 +37,20 @@ import org.slf4j.LoggerFactory;
  * </p>
  * <p>This signer is always implicitly added into every wallet and it is the first signer to be executed during tx
  * completion. As the first signer to create a signature, it stores derivation path of the signing key in a given
- * {@link ProposedTransaction} object that will be also passed then to the next signer in chain. This allows other
+ * {@link org.bitcoinj.signers.TransactionSigner.ProposedTransaction} object that will be also passed then to the next signer in chain. This allows other
  * signers to use correct signing key for P2SH inputs, because all the keys involved in a single P2SH address have
  * the same derivation path.</p>
  * <p>This signer always uses {@link org.bitcoinj.core.Transaction.SigHash#ALL} signing mode.</p>
  */
 public class LocalTransactionSigner extends StatelessTransactionSigner {
     private static final Logger log = LoggerFactory.getLogger(LocalTransactionSigner.class);
+
+    /**
+     * Verify flags that are safe to use when testing if an input is already
+     * signed.
+     */
+    private static final EnumSet<VerifyFlag> MINIMUM_VERIFY_FLAGS = EnumSet.of(VerifyFlag.P2SH,
+        VerifyFlag.NULLDUMMY);
 
     @Override
     public boolean isReady() {
@@ -62,7 +72,7 @@ public class LocalTransactionSigner extends StatelessTransactionSigner {
                 // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
                 // we sign missing pieces (to check this would require either assuming any signatures are signing
                 // standard output types or a way to get processed signatures out of script execution)
-                txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
+                txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey(), MINIMUM_VERIFY_FLAGS);
                 log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
                 continue;
             } catch (ScriptException e) {
@@ -84,7 +94,7 @@ public class LocalTransactionSigner extends StatelessTransactionSigner {
             // locate private key in redeem data. For pay-to-address and pay-to-key inputs RedeemData will always contain
             // only one key (with private bytes). For P2SH inputs RedeemData will contain multiple keys, one of which MAY
             // have private bytes
-            if (redeemData == null || (key = redeemData.getFullKey()) == null) {
+            if ((key = redeemData.getFullKey()) == null) {
                 log.warn("No local key found for input {}", i);
                 continue;
             }
@@ -106,7 +116,6 @@ public class LocalTransactionSigner extends StatelessTransactionSigner {
                 int sigIndex = 0;
                 inputScript = scriptPubKey.getScriptSigWithSignature(inputScript, signature.encodeToBitcoin(), sigIndex);
                 txIn.setScriptSig(inputScript);
-
             } catch (ECKey.KeyIsEncryptedException e) {
                 throw e;
             } catch (ECKey.MissingPrivateKeyException e) {

@@ -16,9 +16,13 @@
 
 package org.bitcoinj.protocols.channels;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.AsyncFunction;
 import org.bitcoinj.core.*;
 import org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason;
 import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.Wallet;
+
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -26,8 +30,10 @@ import com.google.protobuf.ByteString;
 import net.jcip.annotations.GuardedBy;
 import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.LoggerFactory;
+import org.spongycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -47,12 +53,17 @@ public class PaymentChannelServer {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(PaymentChannelServer.class);
 
     protected final ReentrantLock lock = Threading.lock("channelserver");
-    public final int SERVER_MAJOR_VERSION = 1;
-    public final int SERVER_MINOR_VERSION = 0;
+
+    /**
+     * A map of supported versions; keys are major versions, and the corresponding
+     * value is the minor version at that major level.
+     */
+    public static final Map<Integer, Integer> SERVER_VERSIONS = ImmutableMap.of(1, 0, 2, 0);
 
     // The step in the initialization process we are in, some of this is duplicated in the PaymentChannelServerState
     private enum InitStep {
         WAITING_ON_CLIENT_VERSION,
+        // This step is only used in V1 of the protocol.
         WAITING_ON_UNSIGNED_REFUND,
         WAITING_ON_CONTRACT,
         WAITING_ON_MULTISIG_ACCEPTANCE,
@@ -75,7 +86,7 @@ public class PaymentChannelServer {
          *
          * <p>Called while holding a lock on the {@link PaymentChannelServer} object - be careful about reentrancy</p>
          */
-        public void sendToClient(Protos.TwoWayChannelMessage msg);
+        void sendToClient(Protos.TwoWayChannelMessage msg);
 
         /**
          * <p>Requests that the connection to the client be closed</p>
@@ -85,7 +96,7 @@ public class PaymentChannelServer {
          * @param reason The reason for the closure, see the individual values for more details.
          *               It is usually safe to ignore this value.
          */
-        public void destroyConnection(CloseReason reason);
+        void destroyConnection(CloseReason reason);
 
         /**
          * <p>Triggered when the channel is opened and payments can begin</p>
@@ -94,7 +105,7 @@ public class PaymentChannelServer {
          *
          * @param contractHash A unique identifier which represents this channel (actually the hash of the multisig contract)
          */
-        public void channelOpen(Sha256Hash contractHash);
+        void channelOpen(Sha256Hash contractHash);
 
         /**
          * <p>Called when the payment in this channel was successfully incremented by the client</p>
@@ -107,9 +118,38 @@ public class PaymentChannelServer {
          * @return A future that completes with the ack message that will be included in the PaymentAck message to the client. Use null for no ack message.
          */
         @Nullable
-        public ListenableFuture<ByteString> paymentIncrease(Coin by, Coin to, @Nullable ByteString info);
+        ListenableFuture<ByteString> paymentIncrease(Coin by, Coin to, @Nullable ByteString info);
+
+        /**
+         * <p>Called when a channel is being closed and must be signed, possibly with an encrypted key.</p>
+         * @return A future for the (nullable) KeyParameter for the ECKey, or <code>null</code> if no key is required.
+         */
+        @Nullable
+        ListenableFuture<KeyParameter> getUserKey();
     }
     private final ServerConnection conn;
+
+    public interface ServerChannelProperties {
+        /**
+         * The size of the payment that the client is requested to pay in the initiate phase.
+         */
+        Coin getMinPayment();
+
+        /**
+         * The maximum allowed channel time window in seconds.
+         * Note that the server need to be online for the whole time the channel is open.
+         * Failure to do this could cause loss of all payments received on the channel.
+         */
+        long getMaxTimeWindow();
+
+        /**
+         * The minimum allowed channel time window in seconds, must be larger than 7200.
+         */
+        long getMinTimeWindow();
+    }
+
+    // Used to track the negotiated version number
+    @GuardedBy("lock") private int majorVersion;
 
     // Used to keep track of whether or not the "socket" ie connection is open and we can generate messages
     @GuardedBy("lock") private boolean connectionOpen = false;
@@ -122,6 +162,10 @@ public class PaymentChannelServer {
 
     // The key used for multisig in this channel
     @GuardedBy("lock") private ECKey myKey;
+
+    // The fee server charges for managing (and settling the channel).
+    // This is will be requested in the setup via the min_payment field in the initiate message.
+    private final Coin minPayment;
 
     // The minimum accepted channel value
     private final Coin minAcceptedChannelSize;
@@ -166,7 +210,7 @@ public class PaymentChannelServer {
      */
     public PaymentChannelServer(TransactionBroadcaster broadcaster, Wallet wallet,
                                 Coin minAcceptedChannelSize, ServerConnection conn) {
-        this(broadcaster, wallet, minAcceptedChannelSize, DEFAULT_MIN_TIME_WINDOW, DEFAULT_MAX_TIME_WINDOW, conn);
+        this(broadcaster, wallet, minAcceptedChannelSize, new DefaultServerChannelProperties(), conn);
     }
 
     /**
@@ -180,22 +224,21 @@ public class PaymentChannelServer {
      *                               and may cause fees to be require to settle the channel. A reasonable value depends
      *                               entirely on the expected maximum for the channel, and should likely be somewhere
      *                               between a few bitcents and a bitcoin.
-     * @param minTimeWindow The minimum allowed channel time window in seconds, must be larger than 7200.
-     * @param maxTimeWindow The maximum allowed channel time window in seconds. Note that the server need to be online for the whole time the channel is open.
-     *                              Failure to do this could cause loss of all payments received on the channel.
+     * @param serverChannelProperties Modify the channel's properties. You may extend {@link DefaultServerChannelProperties}
      * @param conn A callback listener which represents the connection to the client (forwards messages we generate to
      *              the client and will close the connection on request)
      */
     public PaymentChannelServer(TransactionBroadcaster broadcaster, Wallet wallet,
-                                Coin minAcceptedChannelSize, long minTimeWindow, long maxTimeWindow, ServerConnection conn) {
+                                Coin minAcceptedChannelSize, ServerChannelProperties serverChannelProperties, ServerConnection conn) {
+        minTimeWindow = serverChannelProperties.getMinTimeWindow();
+        maxTimeWindow = serverChannelProperties.getMaxTimeWindow();
         if (minTimeWindow > maxTimeWindow) throw new IllegalArgumentException("minTimeWindow must be less or equal to maxTimeWindow");
         if (minTimeWindow < HARD_MIN_TIME_WINDOW) throw new IllegalArgumentException("minTimeWindow must be larger than" + HARD_MIN_TIME_WINDOW  + " seconds");
         this.broadcaster = checkNotNull(broadcaster);
         this.wallet = checkNotNull(wallet);
+        this.minPayment = checkNotNull(serverChannelProperties.getMinPayment());
         this.minAcceptedChannelSize = checkNotNull(minAcceptedChannelSize);
         this.conn = checkNotNull(conn);
-        this.minTimeWindow = minTimeWindow;
-        this.maxTimeWindow = maxTimeWindow;
     }
 
     /**
@@ -211,22 +254,22 @@ public class PaymentChannelServer {
     private void receiveVersionMessage(Protos.TwoWayChannelMessage msg) throws VerificationException {
         checkState(step == InitStep.WAITING_ON_CLIENT_VERSION && msg.hasClientVersion());
         final Protos.ClientVersion clientVersion = msg.getClientVersion();
-        final int major = clientVersion.getMajor();
-        if (major != SERVER_MAJOR_VERSION) {
-            error("This server needs protocol version " + SERVER_MAJOR_VERSION + " , client offered " + major,
+        majorVersion = clientVersion.getMajor();
+        if (!SERVER_VERSIONS.containsKey(majorVersion)) {
+            error("This server needs one of protocol versions " + SERVER_VERSIONS.keySet() + " , client offered " + majorVersion,
                     Protos.Error.ErrorCode.NO_ACCEPTABLE_VERSION, CloseReason.NO_ACCEPTABLE_VERSION);
             return;
         }
 
         Protos.ServerVersion.Builder versionNegotiationBuilder = Protos.ServerVersion.newBuilder()
-                .setMajor(SERVER_MAJOR_VERSION).setMinor(SERVER_MINOR_VERSION);
+                .setMajor(majorVersion).setMinor(SERVER_VERSIONS.get(majorVersion));
         conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                 .setType(Protos.TwoWayChannelMessage.MessageType.SERVER_VERSION)
                 .setServerVersion(versionNegotiationBuilder)
                 .build());
         ByteString reopenChannelContractHash = clientVersion.getPreviousChannelContractHash();
         if (reopenChannelContractHash != null && reopenChannelContractHash.size() == 32) {
-            Sha256Hash contractHash = new Sha256Hash(reopenChannelContractHash.toByteArray());
+            Sha256Hash contractHash = Sha256Hash.wrap(reopenChannelContractHash.toByteArray());
             log.info("New client that wants to resume {}", contractHash);
             StoredPaymentChannelServerStates channels = (StoredPaymentChannelServerStates)
                     wallet.getExtensions().get(StoredPaymentChannelServerStates.EXTENSION_ID);
@@ -262,13 +305,23 @@ public class PaymentChannelServer {
         wallet.freshReceiveKey();
 
         expireTime = Utils.currentTimeSeconds() + truncateTimeWindow(clientVersion.getTimeWindowSecs());
-        step = InitStep.WAITING_ON_UNSIGNED_REFUND;
+        switch (majorVersion) {
+            case 1:
+                step = InitStep.WAITING_ON_UNSIGNED_REFUND;
+                break;
+            case 2:
+                step = InitStep.WAITING_ON_CONTRACT;
+                break;
+            default:
+                error("Protocol version " + majorVersion + " not supported", Protos.Error.ErrorCode.NO_ACCEPTABLE_VERSION, CloseReason.NO_ACCEPTABLE_VERSION);
+                break;
+        }
 
         Protos.Initiate.Builder initiateBuilder = Protos.Initiate.newBuilder()
                 .setMultisigKey(ByteString.copyFrom(myKey.getPubKey()))
                 .setExpireTimeSecs(expireTime)
                 .setMinAcceptedChannelSize(minAcceptedChannelSize.value)
-                .setMinPayment(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.value);
+                .setMinPayment(minPayment.value);
 
         conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                 .setInitiate(initiateBuilder)
@@ -290,13 +343,16 @@ public class PaymentChannelServer {
 
     @GuardedBy("lock")
     private void receiveRefundMessage(Protos.TwoWayChannelMessage msg) throws VerificationException {
+        checkState(majorVersion == 1);
         checkState(step == InitStep.WAITING_ON_UNSIGNED_REFUND && msg.hasProvideRefund());
         log.info("Got refund transaction, returning signature");
 
         Protos.ProvideRefund providedRefund = msg.getProvideRefund();
-        state = new PaymentChannelServerState(broadcaster, wallet, myKey, expireTime);
-        byte[] signature = state.provideRefundTransaction(new Transaction(wallet.getParams(), providedRefund.getTx().toByteArray()),
-                providedRefund.getMultisigKey().toByteArray());
+        state = new PaymentChannelV1ServerState(broadcaster, wallet, myKey, expireTime);
+        // We can cast to V1 state since this state is only used in the V1 protocol
+        byte[] signature = ((PaymentChannelV1ServerState) state)
+                .provideRefundTransaction(wallet.getParams().getDefaultSerializer().makeTransaction(providedRefund.getTx().toByteArray()),
+                        providedRefund.getMultisigKey().toByteArray());
 
         step = InitStep.WAITING_ON_CONTRACT;
 
@@ -344,18 +400,25 @@ public class PaymentChannelServer {
 
     @GuardedBy("lock")
     private void receiveContractMessage(Protos.TwoWayChannelMessage msg) throws VerificationException {
+        checkState(majorVersion == 1 || majorVersion == 2);
         checkState(step == InitStep.WAITING_ON_CONTRACT && msg.hasProvideContract());
         log.info("Got contract, broadcasting and responding with CHANNEL_OPEN");
         final Protos.ProvideContract providedContract = msg.getProvideContract();
 
+        if (majorVersion == 2) {
+            state = new PaymentChannelV2ServerState(broadcaster, wallet, myKey, expireTime);
+            checkState(providedContract.hasClientKey(), "ProvideContract didn't have a client key in protocol v2");
+            ((PaymentChannelV2ServerState)state).provideClientKey(providedContract.getClientKey().toByteArray());
+        }
+
         //TODO notify connection handler that timeout should be significantly extended as we wait for network propagation?
-        final Transaction multisigContract = new Transaction(wallet.getParams(), providedContract.getTx().toByteArray());
+        final Transaction contract = wallet.getParams().getDefaultSerializer().makeTransaction(providedContract.getTx().toByteArray());
         step = InitStep.WAITING_ON_MULTISIG_ACCEPTANCE;
-        state.provideMultiSigContract(multisigContract)
+        state.provideContract(contract)
                 .addListener(new Runnable() {
                     @Override
                     public void run() {
-                        multisigContractPropogated(providedContract, multisigContract.getHash());
+                        multisigContractPropogated(providedContract, contract.getHash());
                     }
                 }, Threading.SAME_THREAD);
     }
@@ -413,9 +476,6 @@ public class PaymentChannelServer {
             checkState(connectionOpen);
             if (channelSettling)
                 return;
-            // If we generate an error, we set errorBuilder and closeReason and break, otherwise we return
-            Protos.Error.Builder errorBuilder;
-            CloseReason closeReason;
             try {
                 switch (msg.getType()) {
                     case CLIENT_VERSION:
@@ -466,8 +526,9 @@ public class PaymentChannelServer {
         log.error(message);
         Protos.Error.Builder errorBuilder;
         errorBuilder = Protos.Error.newBuilder()
-                .setCode(errorCode)
-                .setExplanation(message);
+                .setCode(errorCode);
+        if (message != null)
+            errorBuilder.setExplanation(message);
         conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                 .setError(errorBuilder)
                 .setType(Protos.TwoWayChannelMessage.MessageType.ERROR)
@@ -491,7 +552,19 @@ public class PaymentChannelServer {
         // close() on us here below via the stored channel state.
         // TODO: Strongly separate the lifecycle of the payment channel from the TCP connection in these classes.
         channelSettling = true;
-        Futures.addCallback(state.close(), new FutureCallback<Transaction>() {
+        ListenableFuture<KeyParameter> keyFuture = conn.getUserKey();
+        ListenableFuture<Transaction> result;
+        if (keyFuture != null) {
+            result = Futures.transformAsync(conn.getUserKey(), new AsyncFunction<KeyParameter, Transaction>() {
+                @Override
+                public ListenableFuture<Transaction> apply(KeyParameter userKey) throws Exception {
+                    return state.close(userKey);
+                }
+            });
+        } else {
+            result = state.close();
+        }
+        Futures.addCallback(result, new FutureCallback<Transaction>() {
             @Override
             public void onSuccess(Transaction result) {
                 // Send the successfully accepted transaction back to the client.
@@ -500,7 +573,7 @@ public class PaymentChannelServer {
                 if (result != null) {
                     // Result can be null on various error paths, like if we never actually opened
                     // properly and so on.
-                    msg.getSettlementBuilder().setTx(ByteString.copyFrom(result.bitcoinSerialize()));
+                    msg.getSettlementBuilder().setTx(ByteString.copyFrom(result.unsafeBitcoinSerialize()));
                     log.info("Sending CLOSE back with broadcast settlement tx.");
                 } else {
                     log.info("Sending CLOSE back without broadcast settlement tx.");
@@ -522,7 +595,7 @@ public class PaymentChannelServer {
      * resume this channel in the future and stops generating messages for the client.</p>
      *
      * <p>Note that this <b>MUST</b> still be called even after either
-     * {@link ServerConnection#destroyConnection(CloseReason)} or
+     * {@link org.bitcoinj.protocols.channels.PaymentChannelServer.ServerConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)} or
      * {@link PaymentChannelServer#close()} is called to actually handle the connection close logic.</p>
      */
     public void connectionClosed() {
@@ -532,18 +605,18 @@ public class PaymentChannelServer {
             connectionOpen = false;
 
             try {
-                if (state != null && state.getMultisigContract() != null) {
+                if (state != null && state.getContract() != null) {
                     StoredPaymentChannelServerStates channels = (StoredPaymentChannelServerStates)
                             wallet.getExtensions().get(StoredPaymentChannelServerStates.EXTENSION_ID);
                     if (channels != null) {
-                        StoredServerChannel storedServerChannel = channels.getChannel(state.getMultisigContract().getHash());
+                        StoredServerChannel storedServerChannel = channels.getChannel(state.getContract().getHash());
                         if (storedServerChannel != null) {
                             storedServerChannel.clearConnectedHandler();
                         }
                     }
                 }
             } catch (IllegalStateException e) {
-                // Expected when we call getMultisigContract() sometimes
+                // Expected when we call getContract() sometimes
             }
         } finally {
             lock.unlock();
@@ -565,7 +638,7 @@ public class PaymentChannelServer {
 
     /**
      * <p>Closes the connection by generating a settle message for the client and calls
-     * {@link ServerConnection#destroyConnection(CloseReason)}. Note that this does not broadcast
+     * {@link org.bitcoinj.protocols.channels.PaymentChannelServer.ServerConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)}. Note that this does not broadcast
      * the payment transaction and the client may still resume the same channel if they reconnect</p>
      * <p>
      * <p>Note that {@link PaymentChannelServer#connectionClosed()} must still be called after the connection fully
@@ -584,4 +657,27 @@ public class PaymentChannelServer {
             lock.unlock();
         }
     }
+
+    /**
+     * Extend this class and override the values you want to change.
+     */
+    public static class DefaultServerChannelProperties implements ServerChannelProperties {
+
+        @Override
+        public Coin getMinPayment() {
+            return Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
+        }
+
+        @Override
+        public long getMaxTimeWindow() {
+            return DEFAULT_MAX_TIME_WINDOW;
+        }
+
+        @Override
+        public long getMinTimeWindow() {
+            return DEFAULT_MIN_TIME_WINDOW;
+        }
+
+    }
+
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright by the original author or authors.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.bitcoinj.wallet;
 
 import org.bitcoinj.core.Coin;
@@ -5,7 +21,6 @@ import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionConfidence;
 import org.bitcoinj.core.TransactionOutput;
-import org.bitcoinj.params.RegTestParams;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.math.BigInteger;
@@ -18,22 +33,22 @@ import java.util.*;
  */
 public class DefaultCoinSelector implements CoinSelector {
     @Override
-    public CoinSelection select(Coin biTarget, List<TransactionOutput> candidates) {
-        long target = biTarget.value;
-        HashSet<TransactionOutput> selected = new HashSet<TransactionOutput>();
+    public CoinSelection select(Coin target, List<TransactionOutput> candidates) {
+        ArrayList<TransactionOutput> selected = new ArrayList<>();
         // Sort the inputs by age*value so we get the highest "coindays" spent.
         // TODO: Consider changing the wallets internal format to track just outputs and keep them ordered.
-        ArrayList<TransactionOutput> sortedOutputs = new ArrayList<TransactionOutput>(candidates);
+        ArrayList<TransactionOutput> sortedOutputs = new ArrayList<>(candidates);
         // When calculating the wallet balance, we may be asked to select all possible coins, if so, avoid sorting
         // them in order to improve performance.
-        if (!biTarget.equals(NetworkParameters.MAX_MONEY)) {
+        // TODO: Take in network parameters when instanatiated, and then test against the current network. Or just have a boolean parameter for "give me everything"
+        if (!target.equals(NetworkParameters.MAX_MONEY)) {
             sortOutputs(sortedOutputs);
         }
         // Now iterate over the sorted outputs until we have got as close to the target as possible or a little
         // bit over (excessive value will be change).
         long total = 0;
         for (TransactionOutput output : sortedOutputs) {
-            if (total >= target) break;
+            if (total >= target.value) break;
             // Only pick chain-included transactions, or transactions that are ours and pending.
             if (!shouldSelect(output.getParentTransaction())) continue;
             selected.add(output);
@@ -48,14 +63,8 @@ public class DefaultCoinSelector implements CoinSelector {
         Collections.sort(outputs, new Comparator<TransactionOutput>() {
             @Override
             public int compare(TransactionOutput a, TransactionOutput b) {
-                int depth1 = 0;
-                int depth2 = 0;
-                TransactionConfidence conf1 = a.getParentTransaction().getConfidence();
-                TransactionConfidence conf2 = b.getParentTransaction().getConfidence();
-                if (conf1.getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING)
-                    depth1 = conf1.getDepthInBlocks();
-                if (conf2.getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING)
-                    depth2 = conf2.getDepthInBlocks();
+                int depth1 = a.getParentTransactionDepthInBlocks();
+                int depth2 = b.getParentTransactionDepthInBlocks();
                 Coin aValue = a.getValue();
                 Coin bValue = b.getValue();
                 BigInteger aCoinDepth = BigInteger.valueOf(aValue.value).multiply(BigInteger.valueOf(depth1));
@@ -66,8 +75,8 @@ public class DefaultCoinSelector implements CoinSelector {
                 int c2 = bValue.compareTo(aValue);
                 if (c2 != 0) return c2;
                 // They are entirely equivalent (possibly pending) so sort by hash to ensure a total ordering.
-                BigInteger aHash = a.getParentTransaction().getHash().toBigInteger();
-                BigInteger bHash = b.getParentTransaction().getHash().toBigInteger();
+                BigInteger aHash = a.getParentTransactionHash().toBigInteger();
+                BigInteger bHash = b.getParentTransactionHash().toBigInteger();
                 return aHash.compareTo(bHash);
             }
         });
@@ -75,7 +84,10 @@ public class DefaultCoinSelector implements CoinSelector {
 
     /** Sub-classes can override this to just customize whether transactions are usable, but keep age sorting. */
     protected boolean shouldSelect(Transaction tx) {
-        return isSelectable(tx);
+        if (tx != null) {
+            return isSelectable(tx);
+        }
+        return true;
     }
 
     public static boolean isSelectable(Transaction tx) {
@@ -88,6 +100,6 @@ public class DefaultCoinSelector implements CoinSelector {
                confidence.getSource().equals(TransactionConfidence.Source.SELF) &&
                // In regtest mode we expect to have only one peer, so we won't see transactions propagate.
                // TODO: The value 1 below dates from a time when transactions we broadcast *to* were counted, set to 0
-               (confidence.numBroadcastPeers() > 1 || tx.getParams() == RegTestParams.get());
+               (confidence.numBroadcastPeers() > 1 || tx.getParams().getId().equals(NetworkParameters.ID_REGTEST));
     }
 }

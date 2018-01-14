@@ -1,5 +1,6 @@
-/**
+/*
  * Copyright 2011 Micheal Swiggs
+ * Copyright 2015 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.bitcoinj.net.discovery;
 
 import org.bitcoinj.params.MainNetParams;
@@ -35,7 +37,7 @@ public class SeedPeersTest {
     @Test
     public void getPeer_all() throws Exception{
         SeedPeers seedPeers = new SeedPeers(MainNetParams.get());
-        for(int i = 0; i < SeedPeers.seedAddrs.length; ++i){
+        for (int i = 0; i < MainNetParams.get().getAddrSeeds().length; ++i) {
             assertThat("Failed on index: "+i, seedPeers.getPeer(), notNullValue());
         }
         assertThat(seedPeers.getPeer(), equalTo(null));
@@ -44,7 +46,7 @@ public class SeedPeersTest {
     @Test
     public void getPeers_length() throws Exception{
         SeedPeers seedPeers = new SeedPeers(MainNetParams.get());
-        InetSocketAddress[] addresses = seedPeers.getPeers(0, TimeUnit.SECONDS);
-        assertThat(addresses.length, equalTo(SeedPeers.seedAddrs.length));
+        InetSocketAddress[] addresses = seedPeers.getPeers(0, 0, TimeUnit.SECONDS);
+        assertThat(addresses.length, equalTo(MainNetParams.get().getAddrSeeds().length));
     }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  * Copyright 2014 Andreas Schildbach
  *
@@ -17,19 +17,26 @@
 
 package org.bitcoinj.core;
 
-import org.bitcoinj.params.*;
-import org.bitcoinj.script.Script;
-import org.bitcoinj.script.ScriptOpCodes;
 import com.google.common.base.Objects;
-import org.spongycastle.util.encoders.Hex;
+import org.bitcoinj.core.Block;
+import org.bitcoinj.core.StoredBlock;
+import org.bitcoinj.core.VerificationException;
+import org.bitcoinj.net.discovery.*;
+import org.bitcoinj.params.*;
+import org.bitcoinj.script.*;
+import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
 
-import javax.annotation.Nullable;
-import java.io.ByteArrayOutputStream;
-import java.io.Serializable;
-import java.math.BigInteger;
+import org.bitcoinj.utils.MonetaryFormat;
+
+import javax.annotation.*;
+import java.io.*;
+import java.math.*;
 import java.util.*;
 
 import static org.bitcoinj.core.Coin.*;
+import org.bitcoinj.utils.VersionTally;
+import org.spongycastle.util.encoders.Hex;
 
 /**
  * <p>NetworkParameters contains the data needed for working with an instantiation of a Bitcoin chain.</p>
@@ -39,12 +46,7 @@ import static org.bitcoinj.core.Coin.*;
  * intended for unit testing and local app development purposes. Although this class contains some aliases for
  * them, you are encouraged to call the static get() methods on each specific params class directly.</p>
  */
-public abstract class NetworkParameters implements Serializable {
-    /**
-     * The protocol version this library implements.
-     */
-    public static final int PROTOCOL_VERSION = CoinDefinition.PROTOCOL_VERSION;
-
+public abstract class NetworkParameters {
     /**
      * The alert signing key originally owned by Satoshi, and now passed on to Gavin along with a few others.
      */
@@ -64,6 +66,9 @@ public abstract class NetworkParameters implements Serializable {
     public static final String PAYMENT_PROTOCOL_ID_MAINNET = "main";
     /** The string used by the payment protocol to represent the test net. */
     public static final String PAYMENT_PROTOCOL_ID_TESTNET = "test";
+    /** The string used by the payment protocol to represent unit testing (note that this is non-standard). */
+    public static final String PAYMENT_PROTOCOL_ID_UNIT_TESTS = "unittest";
+    public static final String PAYMENT_PROTOCOL_ID_REGTEST = "regtest";
 
     // TODO: Seed nodes should be here as well.
 
@@ -79,6 +84,14 @@ public abstract class NetworkParameters implements Serializable {
     protected byte[] alertSigningKey;
     protected int transactionVersion = 1;
     protected byte tokenId;
+
+    protected int bip32HeaderPub;
+    protected int bip32HeaderPriv;
+
+    /** Used to check majorities for block version upgrade */
+    protected int majorityEnforceBlockUpgrade;
+    protected int majorityRejectBlockOutdated;
+    protected int majorityWindow;
 
     /**
      * See getId(). This may be null for old deserialized wallets. In that case we derive it heuristically
@@ -99,7 +112,10 @@ public abstract class NetworkParameters implements Serializable {
     
     protected int[] acceptableAddressCodes;
     protected String[] dnsSeeds;
-    protected Map<Integer, Sha256Hash> checkpoints = new HashMap<Integer, Sha256Hash>();
+    protected int[] addrSeeds;
+    protected HttpDiscovery.Details[] httpSeeds = {};
+    protected Map<Integer, Sha256Hash> checkpoints = new HashMap<>();
+    protected transient MessageSerializer defaultSerializer = null;
 
     protected NetworkParameters() {
         alertSigningKey = SATOSHI_KEY;
@@ -107,8 +123,7 @@ public abstract class NetworkParameters implements Serializable {
     }
     //TODO:  put these bytes into the CoinDefinition
     private static Block createGenesis(NetworkParameters n) {
-        Block genesisBlock = new Block(n);
-        genesisBlock.setVersion(CoinDefinition.genesisBlockVersion);
+        Block genesisBlock = new Block(n, Block.BLOCK_VERSION_GENESIS);
         Transaction t = new Transaction(n);
         try {
             // A script containing the difficulty bits and the following message:
@@ -144,7 +159,7 @@ public abstract class NetworkParameters implements Serializable {
      * mined upon and thus will be quickly re-orged out as long as the majority are enforcing the rule.
      */
     public static final int BIP16_ENFORCE_TIME = 1333238400;
-    
+
     /**
      * The maximum number of coins to be generated
      */
@@ -218,8 +233,7 @@ public abstract class NetworkParameters implements Serializable {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        NetworkParameters other = (NetworkParameters) o;
-        return getId().equals(other.getId());
+        return getId().equals(((NetworkParameters)o).getId());
     }
 
     @Override
@@ -250,6 +264,10 @@ public abstract class NetworkParameters implements Serializable {
             return MainNetParams.get();
         } else if (pmtProtocolId.equals(PAYMENT_PROTOCOL_ID_TESTNET)) {
             return TestNet3Params.get();
+        } else if (pmtProtocolId.equals(PAYMENT_PROTOCOL_ID_UNIT_TESTS)) {
+            return UnitTestParams.get();
+        } else if (pmtProtocolId.equals(PAYMENT_PROTOCOL_ID_REGTEST)) {
+            return RegTestParams.get();
         } else {
             return null;
         }
@@ -258,6 +276,13 @@ public abstract class NetworkParameters implements Serializable {
     public int getSpendableCoinbaseDepth() {
         return spendableCoinbaseDepth;
     }
+
+    /**
+     * Throws an exception if the block's difficulty is not correct.
+     *
+     * @throws VerificationException if the block's difficulty is not correct.
+     */
+    public abstract void checkDifficultyTransitions(StoredBlock storedPrev, Block next, final BlockStore blockStore) throws VerificationException, BlockStoreException;
 
     /**
      * Returns true if the block height is either not a checkpoint, or is a checkpoint and the hash matches.
@@ -284,6 +309,16 @@ public abstract class NetworkParameters implements Serializable {
         return dnsSeeds;
     }
 
+    /** Returns IP address of active peers. */
+    public int[] getAddrSeeds() {
+        return addrSeeds;
+    }
+
+    /** Returns discovery objects for seeds implementing the Cartographer protocol. See {@link org.bitcoinj.net.discovery.HttpDiscovery} for more info. */
+    public HttpDiscovery.Details[] getHttpSeeds() {
+        return httpSeeds;
+    }
+
     /**
      * <p>Genesis block for this chain.</p>
      *
@@ -291,7 +326,7 @@ public abstract class NetworkParameters implements Serializable {
      * block to be valid, it must be eventually possible to work backwards to the genesis block by following the
      * prevBlockHash pointers in the block headers.</p>
      *
-     * <p>The genesis blocks for both test and prod networks contain the timestamp of when they were created,
+     * <p>The genesis blocks for both test and main networks contain the timestamp of when they were created,
      * and a message in the coinbase transaction. It says, <i>"The Times 03/Jan/2009 Chancellor on brink of second
      * bailout for banks"</i>.</p>
      */
@@ -333,7 +368,7 @@ public abstract class NetworkParameters implements Serializable {
     /**
      * How much time in seconds is supposed to pass between "interval" blocks. If the actual elapsed time is
      * significantly different from this value, the network difficulty formula will produce a different value. Both
-     * test and production Bitcoin networks use 2 weeks (1209600 seconds).
+     * test and main Bitcoin networks use 2 weeks (1209600 seconds).
      */
     public int getTargetTimespan() {
         return targetTimespan;
@@ -355,7 +390,7 @@ public abstract class NetworkParameters implements Serializable {
         return true;
     }
 
-    /** How many blocks pass between difficulty adjustment periods. Bitcoin standardises this to be 2015. */
+    /** How many blocks pass between difficulty adjustment periods. Bitcoin standardises this to be 2016. */
     public int getInterval() {
         return interval;
     }
@@ -386,5 +421,166 @@ public abstract class NetworkParameters implements Serializable {
      */
     public byte getTokenId() {
         return tokenId;
+    }
+
+    /** Returns the 4 byte header for BIP32 (HD) wallet - public key part. */
+    public int getBip32HeaderPub() {
+        return bip32HeaderPub;
+    }
+
+    /** Returns the 4 byte header for BIP32 (HD) wallet - private key part. */
+    public int getBip32HeaderPriv() {
+        return bip32HeaderPriv;
+    }
+
+    /**
+     * Returns the number of coins that will be produced in total, on this
+     * network. Where not applicable, a very large number of coins is returned
+     * instead (i.e. the main coin issue for Dogecoin).
+     */
+    public abstract Coin getMaxMoney();
+
+    /**
+     * Any standard (ie pay-to-address) output smaller than this value will
+     * most likely be rejected by the network.
+     */
+    public abstract Coin getMinNonDustOutput();
+
+    /**
+     * The monetary object for this currency.
+     */
+    public abstract MonetaryFormat getMonetaryFormat();
+
+    /**
+     * Scheme part for URIs, for example "bitcoin".
+     */
+    public abstract String getUriScheme();
+
+    /**
+     * Returns whether this network has a maximum number of coins (finite supply) or
+     * not. Always returns true for Bitcoin, but exists to be overriden for other
+     * networks.
+     */
+    public abstract boolean hasMaxMoney();
+
+    /**
+     * Return the default serializer for this network. This is a shared serializer.
+     * @return the default serializer for this network.
+     */
+    public final MessageSerializer getDefaultSerializer() {
+        // Construct a default serializer if we don't have one
+        if (null == this.defaultSerializer) {
+            // Don't grab a lock unless we absolutely need it
+            synchronized(this) {
+                // Now we have a lock, double check there's still no serializer
+                // and create one if so.
+                if (null == this.defaultSerializer) {
+                    // As the serializers are intended to be immutable, creating
+                    // two due to a race condition should not be a problem, however
+                    // to be safe we ensure only one exists for each network.
+                    this.defaultSerializer = getSerializer(false);
+                }
+            }
+        }
+        return defaultSerializer;
+    }
+
+    /**
+     * Construct and return a custom serializer.
+     */
+    public abstract BitcoinSerializer getSerializer(boolean parseRetain);
+
+    /**
+     * The number of blocks in the last {@link #getMajorityWindow()} blocks
+     * at which to trigger a notice to the user to upgrade their client, where
+     * the client does not understand those blocks.
+     */
+    public int getMajorityEnforceBlockUpgrade() {
+        return majorityEnforceBlockUpgrade;
+    }
+
+    /**
+     * The number of blocks in the last {@link #getMajorityWindow()} blocks
+     * at which to enforce the requirement that all new blocks are of the
+     * newer type (i.e. outdated blocks are rejected).
+     */
+    public int getMajorityRejectBlockOutdated() {
+        return majorityRejectBlockOutdated;
+    }
+
+    /**
+     * The sampling window from which the version numbers of blocks are taken
+     * in order to determine if a new block version is now the majority.
+     */
+    public int getMajorityWindow() {
+        return majorityWindow;
+    }
+
+    /**
+     * The flags indicating which block validation tests should be applied to
+     * the given block. Enables support for alternative blockchains which enable
+     * tests based on different criteria.
+     * 
+     * @param block block to determine flags for.
+     * @param height height of the block, if known, null otherwise. Returned
+     * tests should be a safe subset if block height is unknown.
+     */
+    public EnumSet<Block.VerifyFlag> getBlockVerificationFlags(final Block block,
+            final VersionTally tally, final Integer height) {
+        final EnumSet<Block.VerifyFlag> flags = EnumSet.noneOf(Block.VerifyFlag.class);
+
+        if (block.isBIP34()) {
+            final Integer count = tally.getCountAtOrAbove(Block.BLOCK_VERSION_BIP34);
+            if (null != count && count >= getMajorityEnforceBlockUpgrade()) {
+                flags.add(Block.VerifyFlag.HEIGHT_IN_COINBASE);
+            }
+        }
+        return flags;
+    }
+
+    /**
+     * The flags indicating which script validation tests should be applied to
+     * the given transaction. Enables support for alternative blockchains which enable
+     * tests based on different criteria.
+     *
+     * @param block block the transaction belongs to.
+     * @param transaction to determine flags for.
+     * @param height height of the block, if known, null otherwise. Returned
+     * tests should be a safe subset if block height is unknown.
+     */
+    public EnumSet<Script.VerifyFlag> getTransactionVerificationFlags(final Block block,
+            final Transaction transaction, final VersionTally tally, final Integer height) {
+        final EnumSet<Script.VerifyFlag> verifyFlags = EnumSet.noneOf(Script.VerifyFlag.class);
+        if (block.getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
+            verifyFlags.add(Script.VerifyFlag.P2SH);
+
+        // Start enforcing CHECKLOCKTIMEVERIFY, (BIP65) for block.nVersion=4
+        // blocks, when 75% of the network has upgraded:
+        if (block.getVersion() >= Block.BLOCK_VERSION_BIP65 &&
+            tally.getCountAtOrAbove(Block.BLOCK_VERSION_BIP65) > this.getMajorityEnforceBlockUpgrade()) {
+            verifyFlags.add(Script.VerifyFlag.CHECKLOCKTIMEVERIFY);
+        }
+
+        return verifyFlags;
+    }
+
+    public abstract int getProtocolVersionNum(final ProtocolVersion version);
+
+    public static enum ProtocolVersion {
+        MINIMUM(70000),
+        PONG(60001),
+        BLOOM_FILTER(70000),
+        WITNESS_VERSION(70012),
+        CURRENT(70012);
+
+        private final int bitcoinProtocol;
+
+        ProtocolVersion(final int bitcoinProtocol) {
+            this.bitcoinProtocol = bitcoinProtocol;
+        }
+
+        public int getBitcoinProtocolVersion() {
+            return bitcoinProtocol;
+        }
     }
 }

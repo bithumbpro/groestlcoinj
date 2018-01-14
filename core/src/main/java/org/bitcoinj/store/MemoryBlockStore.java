@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,7 @@ public class MemoryBlockStore implements BlockStore {
         }
     };
     private StoredBlock chainHead;
+    private NetworkParameters params;
 
     public MemoryBlockStore(NetworkParameters params) {
         // Insert the genesis block.
@@ -40,6 +41,7 @@ public class MemoryBlockStore implements BlockStore {
             StoredBlock storedGenesis = new StoredBlock(genesisHeader, genesisHeader.getWork(), 0);
             put(storedGenesis);
             setChainHead(storedGenesis);
+            this.params = params;
         } catch (BlockStoreException e) {
             throw new RuntimeException(e);  // Cannot happen.
         } catch (VerificationException e) {
@@ -48,7 +50,7 @@ public class MemoryBlockStore implements BlockStore {
     }
 
     @Override
-    public synchronized void put(StoredBlock block) throws BlockStoreException {
+    public synchronized final void put(StoredBlock block) throws BlockStoreException {
         if (blockMap == null) throw new BlockStoreException("MemoryBlockStore is closed");
         Sha256Hash hash = block.getHeader().getHash();
         blockMap.put(hash, block);
@@ -67,7 +69,7 @@ public class MemoryBlockStore implements BlockStore {
     }
 
     @Override
-    public void setChainHead(StoredBlock chainHead) throws BlockStoreException {
+    public final void setChainHead(StoredBlock chainHead) throws BlockStoreException {
         if (blockMap == null) throw new BlockStoreException("MemoryBlockStore is closed");
         this.chainHead = chainHead;
     }
@@ -76,33 +78,9 @@ public class MemoryBlockStore implements BlockStore {
     public void close() {
         blockMap = null;
     }
-    final int nMedianTimeSpan=11;
 
-    public long getMedianTimePast(StoredBlock block)
-    {
-        long [] median = new long[nMedianTimeSpan];
-        //int64_t* pbegin = &pmedian[nMedianTimeSpan];
-        //int64_t* pend = &pmedian[nMedianTimeSpan];
-
-        StoredBlock cursor = block;
-        //for (int i = 0; i < nMedianTimeSpan && pindex; i++, pindex = pindex->pprev)
-        for (int i = 0; i < nMedianTimeSpan && block != null; ++i)
-        {
-            median[nMedianTimeSpan - 1 - i] = cursor.getHeader().getTimeSeconds();
-            //*(--pbegin) = pindex->GetBlockTime();
-
-            try {
-                cursor = cursor.getPrev(this);
-            }
-            catch (BlockStoreException x)
-            {
-                break;
-            }
-
-        }
-        java.util.Arrays.sort(median);
-        //std::sort(pbegin, pend);
-        return median[nMedianTimeSpan/2];
-        //return pbegin[(pend - pbegin)/2];
+    @Override
+    public NetworkParameters getParams() {
+        return params;
     }
 }

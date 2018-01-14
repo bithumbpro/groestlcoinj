@@ -1,28 +1,27 @@
 /*
  * Copyright 2012, 2014 the original author or authors.
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.bitcoinj.uri;
 
-import org.bitcoinj.core.*;
-
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.bitcoinj.core.CoinDefinition;
+import org.bitcoinj.core.Address;
+import org.bitcoinj.core.AddressFormatException;
+import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.params.AbstractBitcoinNetParams;
 
 import javax.annotation.Nullable;
 
@@ -79,11 +78,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * @see <a href="https://github.com/bitcoin/bips/blob/master/bip-0021.mediawiki">BIP 0021</a>
  */
 public class BitcoinURI {
-    /**
-     * Provides logging for this class
-     */
-    private static final Logger log = LoggerFactory.getLogger(BitcoinURI.class);
-
     // Not worth turning into an enum
     public static final String FIELD_MESSAGE = "message";
     public static final String FIELD_LABEL = "label";
@@ -91,7 +85,13 @@ public class BitcoinURI {
     public static final String FIELD_ADDRESS = "address";
     public static final String FIELD_PAYMENT_REQUEST_URL = "r";
 
-    public static final String BITCOIN_SCHEME = CoinDefinition.coinURIScheme;
+    /**
+     * URI for Bitcoin network. Use {@link org.bitcoinj.params.AbstractBitcoinNetParams#BITCOIN_SCHEME} if you specifically
+     * need Bitcoin, or use {@link org.bitcoinj.core.NetworkParameters#getUriScheme} to get the scheme
+     * from network parameters.
+     */
+    @Deprecated
+    public static final String BITCOIN_SCHEME = "groestlcoin";
     private static final String ENCODED_SPACE_CHARACTER = "%20";
     private static final String AMPERSAND_SEPARATOR = "&";
     private static final String QUESTION_MARK_SEPARATOR = "?";
@@ -99,7 +99,7 @@ public class BitcoinURI {
     /**
      * Contains all the parameters in the order in which they were processed
      */
-    private final Map<String, Object> parameterMap = new LinkedHashMap<String, Object>();
+    private final Map<String, Object> parameterMap = new LinkedHashMap<>();
 
     /**
      * Constructs a new BitcoinURI from the given string. Can be for any network.
@@ -122,7 +122,10 @@ public class BitcoinURI {
      */
     public BitcoinURI(@Nullable NetworkParameters params, String input) throws BitcoinURIParseException {
         checkNotNull(input);
-        log.debug("Attempting to parse '{}' for {}", input, params == null ? "any" : params.getId());
+
+        String scheme = null == params
+            ? AbstractBitcoinNetParams.BITCOIN_SCHEME
+            : params.getUriScheme();
 
         // Attempt to form the URI (fail fast syntax checking to official standards).
         URI uri;
@@ -141,15 +144,13 @@ public class BitcoinURI {
         // For instance with : bitcoin:129mVqKUmJ9uwPxKJBnNdABbuaaNfho4Ha?amount=0.06&label=Tom%20%26%20Jerry
         // the & (%26) in Tom and Jerry gets interpreted as a separator and the label then gets parsed
         // as 'Tom ' instead of 'Tom & Jerry')
+        String blockchainInfoScheme = scheme + "://";
+        String correctScheme = scheme + ":";
         String schemeSpecificPart;
-
-        String scheme1 = BITCOIN_SCHEME + "://";
-        String scheme2 = BITCOIN_SCHEME + ":";
-
-        if (input.startsWith(scheme1)) {
-            schemeSpecificPart = input.substring(scheme1.length());
-        } else if (input.startsWith(scheme2)) {
-            schemeSpecificPart = input.substring(scheme2.length());
+        if (input.startsWith(blockchainInfoScheme)) {
+            schemeSpecificPart = input.substring(blockchainInfoScheme.length());
+        } else if (input.startsWith(correctScheme)) {
+            schemeSpecificPart = input.substring(correctScheme.length());
         } else {
             throw new BitcoinURIParseException("Unsupported URI scheme: " + uri.getScheme());
         }
@@ -157,7 +158,7 @@ public class BitcoinURI {
         // Split off the address from the rest of the query parameters.
         String[] addressSplitTokens = schemeSpecificPart.split("\\?", 2);
         if (addressSplitTokens.length == 0)
-            throw new BitcoinURIParseException("No data found after the "+CoinDefinition.coinName +": prefix");
+            throw new BitcoinURIParseException("No data found after the "+ CoinDefinition.coinName +": prefix");
         String addressToken = addressSplitTokens[0];  // may be empty!
 
         String[] nameValuePairTokens;
@@ -175,7 +176,7 @@ public class BitcoinURI {
         if (!addressToken.isEmpty()) {
             // Attempt to parse the addressToken as a Bitcoin address for this network
             try {
-                Address address = new Address(params, addressToken);
+                Address address = Address.fromBase58(params, addressToken);
                 putWithValidation(FIELD_ADDRESS, address);
             } catch (final AddressFormatException e) {
                 throw new BitcoinURIParseException("Bad address", e);
@@ -211,13 +212,15 @@ public class BitcoinURI {
                 // Decode the amount (contains an optional decimal component to 8dp).
                 try {
                     Coin amount = Coin.parseCoin(valueToken);
+                    if (params != null && amount.isGreaterThan(params.getMaxMoney()))
+                        throw new BitcoinURIParseException("Max number of coins exceeded");
                     if (amount.signum() < 0)
                         throw new ArithmeticException("Negative coins specified");
                     putWithValidation(FIELD_AMOUNT, amount);
                 } catch (IllegalArgumentException e) {
-                    throw new OptionalFieldValidationException(String.format("'%s' is not a valid amount", valueToken), e);
+                    throw new OptionalFieldValidationException(String.format(Locale.US, "'%s' is not a valid amount", valueToken), e);
                 } catch (ArithmeticException e) {
-                    throw new OptionalFieldValidationException(String.format("'%s' has too many decimal places", valueToken), e);
+                    throw new OptionalFieldValidationException(String.format(Locale.US, "'%s' has too many decimal places", valueToken), e);
                 }
             } else {
                 if (nameToken.startsWith("req-")) {
@@ -229,8 +232,7 @@ public class BitcoinURI {
                         if (valueToken.length() > 0)
                             putWithValidation(nameToken, URLDecoder.decode(valueToken, "UTF-8"));
                     } catch (UnsupportedEncodingException e) {
-                        // Unreachable.
-                        throw new RuntimeException(e);
+                        throw new RuntimeException(e); // can't happen
                     }
                 }
             }
@@ -248,7 +250,7 @@ public class BitcoinURI {
      */
     private void putWithValidation(String key, Object value) throws BitcoinURIParseException {
         if (parameterMap.containsKey(key)) {
-            throw new BitcoinURIParseException(String.format("'%s' is duplicated, URI is invalid", key));
+            throw new BitcoinURIParseException(String.format(Locale.US, "'%s' is duplicated, URI is invalid", key));
         } else {
             parameterMap.put(key, value);
         }
@@ -290,7 +292,7 @@ public class BitcoinURI {
      * @return The URL where a payment request (as specified in BIP 70) may
      *         be fetched.
      */
-    public String getPaymentRequestUrl() {
+    public final String getPaymentRequestUrl() {
         return (String) parameterMap.get(FIELD_PAYMENT_REQUEST_URL);
     }
 
@@ -299,7 +301,7 @@ public class BitcoinURI {
      * all subsequent URLs are fallbacks.
      */
     public List<String> getPaymentRequestUrls() {
-        ArrayList<String> urls = new ArrayList<String>();
+        ArrayList<String> urls = new ArrayList<>();
         while (true) {
             int i = urls.size();
             String paramName = FIELD_PAYMENT_REQUEST_URL + (i > 0 ? Integer.toString(i) : "");
@@ -330,34 +332,49 @@ public class BitcoinURI {
             } else {
                 builder.append(",");
             }
-            builder.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue().toString()).append("'");
+            builder.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
         }
         builder.append("]");
         return builder.toString();
     }
 
-    public static String convertToBitcoinURI(Address address, Coin amount, String label, String message) {
-        return convertToBitcoinURI(address.toString(), amount, label, message);
-    }
-
     /**
      * Simple Bitcoin URI builder using known good fields.
-     * 
+     *
      * @param address The Bitcoin address
      * @param amount The amount
      * @param label A label
      * @param message A message
      * @return A String containing the Bitcoin URI
      */
-    public static String convertToBitcoinURI(String address, @Nullable Coin amount, @Nullable String label,
-                                             @Nullable String message) {
+    public static String convertToBitcoinURI(Address address, Coin amount,
+                                             String label, String message) {
+        return convertToBitcoinURI(address.getParameters(), address.toString(), amount, label, message);
+    }
+
+    /**
+     * Simple Bitcoin URI builder using known good fields.
+     *
+     * @param params The network parameters that determine which network the URI
+     * is for.
+     * @param address The Bitcoin address
+     * @param amount The amount
+     * @param label A label
+     * @param message A message
+     * @return A String containing the Bitcoin URI
+     */
+    public static String convertToBitcoinURI(NetworkParameters params,
+                                             String address, @Nullable Coin amount,
+                                             @Nullable String label, @Nullable String message) {
+        checkNotNull(params);
         checkNotNull(address);
         if (amount != null && amount.signum() < 0) {
             throw new IllegalArgumentException("Coin must be positive");
         }
         
         StringBuilder builder = new StringBuilder();
-        builder.append(BITCOIN_SCHEME).append(":").append(address);
+        String scheme = params.getUriScheme();
+        builder.append(scheme).append(":").append(address);
         
         boolean questionMarkHasBeenOutput = false;
         
@@ -398,8 +415,7 @@ public class BitcoinURI {
         try {
             return java.net.URLEncoder.encode(stringToEncode, "UTF-8").replace("+", ENCODED_SPACE_CHARACTER);
         } catch (UnsupportedEncodingException e) {
-            // should not happen - UTF-8 is a valid encoding
-            throw new RuntimeException(e);
+            throw new RuntimeException(e); // can't happen
         }
     }
 }

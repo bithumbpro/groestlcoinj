@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2013 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,9 @@ package org.bitcoinj.jni;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.Wallet;
-import org.bitcoinj.core.WalletEventListener;
 import org.bitcoinj.script.Script;
+import org.bitcoinj.wallet.Wallet;
+import org.bitcoinj.wallet.listeners.WalletEventListener;
 
 import java.util.List;
 
@@ -52,5 +52,5 @@ public class NativeWalletEventListener implements WalletEventListener {
     public native void onKeysAdded(List<ECKey> keys);
 
     @Override
-    public native void onScriptsAdded(Wallet wallet, List<Script> scripts);
+    public native void onScriptsChanged(Wallet wallet, List<Script> scripts, boolean isAddingScripts);
 }

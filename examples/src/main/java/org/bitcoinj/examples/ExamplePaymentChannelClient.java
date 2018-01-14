@@ -17,14 +17,18 @@
 
 package org.bitcoinj.examples;
 
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 import org.bitcoinj.core.*;
 import org.bitcoinj.kits.WalletAppKit;
 import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.protocols.channels.PaymentChannelClientConnection;
-import org.bitcoinj.protocols.channels.StoredPaymentChannelClientStates;
-import org.bitcoinj.protocols.channels.ValueOutOfRangeException;
+import org.bitcoinj.protocols.channels.*;
 import org.bitcoinj.utils.BriefLogFormatter;
 import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.Wallet;
+import org.bitcoinj.wallet.WalletExtension;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -53,8 +57,39 @@ public class ExamplePaymentChannelClient {
 
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
-        System.out.println("USAGE: host");
-        new ExamplePaymentChannelClient().run(args[0]);
+        OptionParser parser = new OptionParser();
+        OptionSpec<NetworkEnum> net = parser.accepts("net", "The network to run the examples on").withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
+        OptionSpec<Integer> version = parser.accepts("version", "The payment channel protocol to use").withRequiredArg().ofType(Integer.class);
+        parser.accepts("help", "Displays program options");
+        OptionSet opts = parser.parse(args);
+        if (opts.has("help") || !opts.has(net) || opts.nonOptionArguments().size() != 1) {
+            System.err.println("usage: ExamplePaymentChannelClient --net=MAIN/TEST/REGTEST --version=1/2 host");
+            parser.printHelpOn(System.err);
+            return;
+        }
+        IPaymentChannelClient.ClientChannelProperties clientChannelProperties = new PaymentChannelClient.DefaultClientChannelProperties(){
+            @Override
+            public PaymentChannelClient.VersionSelector versionSelector() { return PaymentChannelClient.VersionSelector.VERSION_1; }
+        };
+
+        if (opts.has("version")) {
+            switch (version.value(opts)) {
+                case 1:
+                    // Keep the default
+                    break;
+                case 2:
+                    clientChannelProperties = new PaymentChannelClient.DefaultClientChannelProperties(){
+                        @Override
+                        public PaymentChannelClient.VersionSelector versionSelector() { return PaymentChannelClient.VersionSelector.VERSION_2; }
+                    };
+                    break;
+                default:
+                    System.err.println("Invalid version - valid versions are 1, 2");
+                    return;
+            }
+        }
+        NetworkParameters params = net.value(opts).get();
+        new ExamplePaymentChannelClient().run(opts.nonOptionArguments().get(0), clientChannelProperties, params);
     }
 
     public ExamplePaymentChannelClient() {
@@ -63,7 +98,7 @@ public class ExamplePaymentChannelClient {
         params = RegTestParams.get();
     }
 
-    public void run(final String host) throws Exception {
+    public void run(final String host, IPaymentChannelClient.ClientChannelProperties clientChannelProperties, final NetworkParameters params) throws Exception {
         // Bring up all the objects we need, create/load a wallet, sync the chain, etc. We override WalletAppKit so we
         // can customize it by adding the extension objects - we have to do this before the wallet file is loaded so
         // the plugin that knows how to parse all the additional data is present during the load.
@@ -73,10 +108,16 @@ public class ExamplePaymentChannelClient {
                 // The StoredPaymentChannelClientStates object is responsible for, amongst other things, broadcasting
                 // the refund transaction if its lock time has expired. It also persists channels so we can resume them
                 // after a restart.
-                return ImmutableList.<WalletExtension>of(new StoredPaymentChannelClientStates(null, peerGroup()));
+                // We should not send a PeerGroup in the StoredPaymentChannelClientStates constructor
+                // since WalletAppKit will find it for us.
+                return ImmutableList.<WalletExtension>of(new StoredPaymentChannelClientStates(null));
             }
         };
-        appKit.connectToLocalHost();
+        // Broadcasting can take a bit of time so we up the timeout for "real" networks
+        final int timeoutSeconds = params.getId().equals(NetworkParameters.ID_REGTEST) ? 15 : 150;
+        if (params == RegTestParams.get()) {
+            appKit.connectToLocalHost();
+        }
         appKit.startAsync();
         appKit.awaitRunning();
         // We now have active network connections and a fully synced wallet.
@@ -92,7 +133,6 @@ public class ExamplePaymentChannelClient {
         //
         // Note that this may or may not actually construct a new channel. If an existing unclosed channel is found in
         // the wallet, then it'll re-use that one instead.
-        final int timeoutSecs = 15;
         final InetSocketAddress server = new InetSocketAddress(host, 4242);
 
         waitForSufficientBalance(channelSize);
@@ -101,18 +141,19 @@ public class ExamplePaymentChannelClient {
         // demonstrates resuming a channel that wasn't closed yet. It should close automatically once we run out
         // of money on the channel.
         log.info("Round one ...");
-        openAndSend(timeoutSecs, server, channelID, 5);
+        openAndSend(timeoutSeconds, server, channelID, 5, clientChannelProperties);
         log.info("Round two ...");
         log.info(appKit.wallet().toString());
-        openAndSend(timeoutSecs, server, channelID, 4);   // 4 times because the opening of the channel made a payment.
+        openAndSend(timeoutSeconds, server, channelID, 4, clientChannelProperties);   // 4 times because the opening of the channel made a payment.
         log.info("Stopping ...");
         appKit.stopAsync();
         appKit.awaitTerminated();
     }
 
-    private void openAndSend(int timeoutSecs, InetSocketAddress server, String channelID, final int times) throws IOException, ValueOutOfRangeException, InterruptedException {
+    private void openAndSend(int timeoutSecs, InetSocketAddress server, String channelID, final int times, IPaymentChannelClient.ClientChannelProperties clientChannelProperties) throws IOException, ValueOutOfRangeException, InterruptedException {
+        // Use protocol version 1 for simplicity
         PaymentChannelClientConnection client = new PaymentChannelClientConnection(
-                server, timeoutSecs, appKit.wallet(), myKey, channelSize, channelID);
+                server, timeoutSecs, appKit.wallet(), myKey, channelSize, channelID, null, clientChannelProperties);
         // Opening the channel requires talking to the server, so it's asynchronous.
         final CountDownLatch latch = new CountDownLatch(1);
         Futures.addCallback(client.getChannelOpenFuture(), new FutureCallback<PaymentChannelClientConnection>() {
@@ -164,7 +205,7 @@ public class ExamplePaymentChannelClient {
 
     private void waitForSufficientBalance(Coin amount) {
         // Not enough money in the wallet.
-        Coin amountPlusFee = amount.add(Wallet.SendRequest.DEFAULT_FEE_PER_KB);
+        Coin amountPlusFee = amount.add(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE);
         // ESTIMATED because we don't really need to wait for confirmation.
         ListenableFuture<Coin> balanceFuture = appKit.wallet().getBalanceFuture(amountPlusFee, Wallet.BalanceType.ESTIMATED);
         if (!balanceFuture.isDone()) {

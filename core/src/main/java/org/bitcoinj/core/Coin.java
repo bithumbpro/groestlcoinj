@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ package org.bitcoinj.core;
 
 import org.bitcoinj.utils.MonetaryFormat;
 import com.google.common.math.LongMath;
+import com.google.common.primitives.Longs;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -85,8 +86,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
     private final long MAX_SATOSHIS = COIN_VALUE * NetworkParameters.MAX_COINS;
 
     private Coin(final long satoshis) {
-        checkArgument(-MAX_SATOSHIS <= satoshis && satoshis <= MAX_SATOSHIS,
-            "%s satoshis exceeds maximum possible quantity of Bitcoin.", satoshis);
         this.value = satoshis;
     }
 
@@ -115,36 +114,95 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
         checkArgument(cents >= 0);
         checkArgument(coins >= 0);
         final Coin coin = COIN.multiply(coins).add(CENT.multiply(cents));
-        checkArgument(coin.compareTo(NetworkParameters.MAX_MONEY) <= 0);
         return coin;
     }
 
     /**
-     * Parses an amount expressed in the way humans are used to.<p>
+     * <p>
+     * Parses an amount expressed in the way humans are used to.
      * <p/>
-     * This takes string in a format understood by {@link BigDecimal#BigDecimal(String)},
-     * for example "0", "1", "0.10", "1.23E3", "1234.5E-5".
+     * <p>
+     * This takes string in a format understood by {@link BigDecimal#BigDecimal(String)}, for example "0", "1", "0.10",
+     * "1.23E3", "1234.5E-5".
+     * </p>
      *
-     * @throws IllegalArgumentException if you try to specify fractional satoshis, or a value out of range.
+     * @throws IllegalArgumentException
+     *             if you try to specify fractional satoshis, or a value out of range.
      */
     public static Coin parseCoin(final String str) {
-        return Coin.valueOf(new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).toBigIntegerExact().longValue());
+        try {
+            long satoshis = new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).longValueExact();
+            return Coin.valueOf(satoshis);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e); // Repackage exception to honor method contract
+        }
+    }
+
+    /**
+     * <p>
+     * Parses an amount expressed in the way humans are used to. The amount is cut to satoshi precision.
+     * <p/>
+     * <p>
+     * This takes string in a format understood by {@link BigDecimal#BigDecimal(String)}, for example "0", "1", "0.10",
+     * "1.23E3", "1234.5E-5".
+     * <p/>
+     *
+     * @throws IllegalArgumentException
+     *             if you try to specify a value out of range.
+     */
+    public static Coin parseCoinInexact(final String str) {
+        try {
+            long satoshis = new BigDecimal(str).movePointRight(SMALLEST_UNIT_EXPONENT).longValue();
+            return Coin.valueOf(satoshis);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e); // Repackage exception to honor method contract
+        }
     }
 
     public Coin add(final Coin value) {
         return new Coin(LongMath.checkedAdd(this.value, value.value));
     }
 
+    /** Alias for add */
+    public Coin plus(final Coin value) {
+        return add(value);
+    }
+
     public Coin subtract(final Coin value) {
         return new Coin(LongMath.checkedSubtract(this.value, value.value));
+    }
+
+    /** Alias for subtract */
+    public Coin minus(final Coin value) {
+        return subtract(value);
     }
 
     public Coin multiply(final long factor) {
         return new Coin(LongMath.checkedMultiply(this.value, factor));
     }
 
+    /** Alias for multiply */
+    public Coin times(final long factor) {
+        return multiply(factor);
+    }
+
+    /** Alias for multiply */
+    public Coin times(final int factor) {
+        return multiply(factor);
+    }
+
     public Coin divide(final long divisor) {
         return new Coin(this.value / divisor);
+    }
+
+    /** Alias for divide */
+    public Coin div(final long divisor) {
+        return divide(divisor);
+    }
+
+    /** Alias for divide */
+    public Coin div(final int divisor) {
+        return divide(divisor);
     }
 
     public Coin[] divideAndRemainder(final long divisor) {
@@ -252,14 +310,9 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
 
     @Override
     public boolean equals(final Object o) {
-        if (o == this)
-            return true;
-        if (o == null || o.getClass() != getClass())
-            return false;
-        final Coin other = (Coin) o;
-        if (this.value != other.value)
-            return false;
-        return true;
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        return this.value == ((Coin)o).value;
     }
 
     @Override
@@ -269,8 +322,6 @@ public final class Coin implements Monetary, Comparable<Coin>, Serializable {
 
     @Override
     public int compareTo(final Coin other) {
-        if (this.value == other.value)
-            return 0;
-        return this.value > other.value ? 1 : -1;
+        return Longs.compare(this.value, other.value);
     }
 }

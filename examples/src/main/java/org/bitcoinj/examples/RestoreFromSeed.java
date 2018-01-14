@@ -1,10 +1,28 @@
+/*
+ * Copyright by the original author or authors.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.bitcoinj.examples;
 
+import org.bitcoinj.core.listeners.DownloadProgressTracker;
 import org.bitcoinj.core.*;
 import org.bitcoinj.net.discovery.DnsDiscovery;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.store.SPVBlockStore;
 import org.bitcoinj.wallet.DeterministicSeed;
+import org.bitcoinj.wallet.Wallet;
 
 import java.io.File;
 
@@ -50,7 +68,7 @@ public class RestoreFromSeed {
         chain.addWallet(wallet);
         peers.addWallet(wallet);
 
-        DownloadListener bListener = new DownloadListener() {
+        DownloadProgressTracker bListener = new DownloadProgressTracker() {
             @Override
             public void doneDownload() {
                 System.out.println("blockchain downloaded");
@@ -58,8 +76,7 @@ public class RestoreFromSeed {
         };
 
         // Now we re-download the blockchain. This replays the chain into the wallet. Once this is completed our wallet should know of all its transactions and print the correct balance.
-        peers.startAsync();
-        peers.awaitRunning();
+        peers.start();
         peers.startBlockChainDownload(bListener);
 
         bListener.await();
@@ -68,8 +85,6 @@ public class RestoreFromSeed {
         System.out.println(wallet.toString());
 
         // shutting down again
-        peers.stopAsync();
-        peers.awaitTerminated();
-
+        peers.stop();
     }
 }

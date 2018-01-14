@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,28 +16,43 @@
 
 package org.bitcoinj.core;
 
+import com.google.common.base.Objects;
+import com.google.common.net.InetAddresses;
+
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Locale;
 
 /**
- * A VersionMessage holds information exchanged during connection setup with another peer. Most of the fields are not
+ * <p>A VersionMessage holds information exchanged during connection setup with another peer. Most of the fields are not
  * particularly interesting. The subVer field, since BIP 14, acts as a User-Agent string would. You can and should 
  * append to or change the subVer for your own software so other implementations can identify it, and you can look at
- * the subVer field received from other nodes to see what they are running. <p>
+ * the subVer field received from other nodes to see what they are running.</p>
  *
- * After creating yourself a VersionMessage, you can pass it to {@link PeerGroup#setVersionMessage(VersionMessage)}
- * to ensure it will be used for each new connection.
+ * <p>After creating yourself a VersionMessage, you can pass it to {@link PeerGroup#setVersionMessage(VersionMessage)}
+ * to ensure it will be used for each new connection.</p>
+ * 
+ * <p>Instances of this class are not safe for use by multiple threads.</p>
  */
 public class VersionMessage extends Message {
-    private static final long serialVersionUID = 7313594258967483180L;
 
-    /** A services flag that denotes whether the peer has a copy of the block chain or not. */
-    public static final int NODE_NETWORK = 1;
-    /** A flag that denotes whether the peer supports the getutxos message or not. */
-    public static final int NODE_GETUTXOS = 2;
+    /** The version of this library release, as a string. */
+    public static final String BITCOINJ_VERSION = "0.15-SNAPSHOT-COINIMI-7";
+    /** The value that is prepended to the subVer field of this application. */
+    public static final String LIBRARY_SUBVER = "/groestlcoinj:" + BITCOINJ_VERSION + "/";
+
+    /** A service bit that denotes whether the peer has a copy of the block chain or not. */
+    public static final int NODE_NETWORK = 1 << 0;
+    /** A service bit that denotes whether the peer supports the getutxos message or not. */
+    public static final int NODE_GETUTXOS = 1 << 1;
+    /** Indicates that a node can be asked for blocks and transactions including witness data. */
+    public static final int NODE_WITNESS = 1 << 3;
+    /** A service bit used by Bitcoin-ABC to announce Bitcoin Cash nodes. */
+    public static final int NODE_BITCOIN_CASH = 1 << 5;
 
     /**
      * The version number of the protocol spoken.
@@ -61,7 +76,7 @@ public class VersionMessage extends Message {
     public PeerAddress theirAddr;
     /**
      * User-Agent as defined in <a href="https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki">BIP 14</a>.
-     * The official client sets it to something like "/Satoshi:0.9.1/".
+     * Bitcoin Core sets it to something like "/Satoshi:0.9.1/".
      */
     public String subVer;
     /**
@@ -74,13 +89,6 @@ public class VersionMessage extends Message {
      */
     public boolean relayTxesBeforeFilter;
 
-    /** The version of this library release, as a string. */
-    public static final String BITCOINJ_VERSION = "0.12.3";
-    /** The value that is prepended to the subVer field of this application. */
-
-    public static final String LIBRARY_SUBVER = "/"+CoinDefinition.coinName+"J:" + BITCOINJ_VERSION + "/";
-
-
     public VersionMessage(NetworkParameters params, byte[] payload) throws ProtocolException {
         super(params, payload, 0);
     }
@@ -91,20 +99,14 @@ public class VersionMessage extends Message {
     
     public VersionMessage(NetworkParameters params, int newBestHeight) {
         super(params);
-        clientVersion = NetworkParameters.PROTOCOL_VERSION;
-        localServices = 0;
+        clientVersion = params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.CURRENT);
+        localServices = NODE_WITNESS;
         time = System.currentTimeMillis() / 1000;
-        // Note that the official client doesn't do anything with these, and finding out your own external IP address
+        // Note that the Bitcoin Core doesn't do anything with these, and finding out your own external IP address
         // is kind of tricky anyway, so we just put nonsense here for now.
-        try {
-            // We hard-code the IPv4 localhost address here rather than use InetAddress.getLocalHost() because some
-            // mobile phones have broken localhost DNS entries, also, this is faster.
-            final byte[] localhost = { 127, 0, 0, 1 };
-            myAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.getPort(), 0);
-            theirAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.getPort(), 0);
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);  // Cannot happen (illegal IP length).
-        }
+        InetAddress localhost = InetAddresses.forString("127.0.0.1");
+        myAddr = new PeerAddress(params, localhost, params.getPort(), 0, BigInteger.ZERO);
+        theirAddr = new PeerAddress(params, localhost, params.getPort(), 0, BigInteger.ZERO);
         subVer = LIBRARY_SUBVER;
         bestHeight = newBestHeight;
         relayTxesBeforeFilter = true;
@@ -116,16 +118,7 @@ public class VersionMessage extends Message {
     }
 
     @Override
-    protected void parseLite() throws ProtocolException {
-        // NOP.  VersionMessage is never lazy parsed.
-    }
-
-    @Override
-    public void parse() throws ProtocolException {
-        if (parsed)
-            return;
-        parsed = true;
-
+    protected void parse() throws ProtocolException {
         clientVersion = (int) readUint32();
         localServices = readUint64().longValue();
         time = readUint64().longValue();
@@ -214,39 +207,23 @@ public class VersionMessage extends Message {
 
     @Override
     public int hashCode() {
-        return (int) bestHeight ^ clientVersion ^ (int) localServices ^ (int) time ^ subVer.hashCode() ^ myAddr.hashCode()
-            ^ theirAddr.hashCode() * (relayTxesBeforeFilter ? 1 : 2);
-    }
-
-    /**
-     * VersionMessage does not handle cached byte array so should not have a cached checksum.
-     */
-    @Override
-    byte[] getChecksum() {
-        throw new UnsupportedOperationException();
-    }
-
-    /**
-     * VersionMessage does not handle cached byte array so should not have a cached checksum.
-     */
-    @Override
-    void setChecksum(byte[] checksum) {
-        throw new UnsupportedOperationException();
+        return Objects.hashCode(bestHeight, clientVersion, localServices,
+            time, subVer, myAddr, theirAddr, relayTxesBeforeFilter);
     }
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n");
-        sb.append("client version: ").append(clientVersion).append("\n");
-        sb.append("local services: ").append(localServices).append("\n");
-        sb.append("time:           ").append(time).append("\n");
-        sb.append("my addr:        ").append(myAddr).append("\n");
-        sb.append("their addr:     ").append(theirAddr).append("\n");
-        sb.append("sub version:    ").append(subVer).append("\n");
-        sb.append("best height:    ").append(bestHeight).append("\n");
-        sb.append("delay tx relay: ").append(!relayTxesBeforeFilter).append("\n");
-        return sb.toString();
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("\n");
+        stringBuilder.append("client version: ").append(clientVersion).append("\n");
+        stringBuilder.append("local services: ").append(localServices).append("\n");
+        stringBuilder.append("time:           ").append(time).append("\n");
+        stringBuilder.append("my addr:        ").append(myAddr).append("\n");
+        stringBuilder.append("their addr:     ").append(theirAddr).append("\n");
+        stringBuilder.append("sub version:    ").append(subVer).append("\n");
+        stringBuilder.append("best height:    ").append(bestHeight).append("\n");
+        stringBuilder.append("delay tx relay: ").append(!relayTxesBeforeFilter).append("\n");
+        return stringBuilder.toString();
     }
 
     public VersionMessage duplicate() {
@@ -263,8 +240,8 @@ public class VersionMessage extends Message {
 
     /**
      * Appends the given user-agent information to the subVer field. The subVer is composed of a series of
-     * name:version pairs separated by slashes in the form of a path. For example a typical subVer field for BitCoinJ
-     * users might look like "/BitCoinJ:0.4-SNAPSHOT/MultiBit:1.2/" where libraries come further to the left.<p>
+     * name:version pairs separated by slashes in the form of a path. For example a typical subVer field for bitcoinj
+     * users might look like "/bitcoinj:0.13/MultiBit:1.2/" where libraries come further to the left.<p>
      *
      * There can be as many components as you feel a need for, and the version string can be anything, but it is
      * recommended to use A.B.C where A = major, B = minor and C = revision for software releases, and dates for
@@ -273,7 +250,7 @@ public class VersionMessage extends Message {
      *
      * Anything put in the "comments" field will appear in brackets and may be used for platform info, or anything
      * else. For example, calling <tt>appendToSubVer("MultiBit", "1.0", "Windows")</tt> will result in a subVer being
-     * set of "/BitCoinJ:1.0/MultiBit:1.0(Windows)/". Therefore the / ( and ) characters are reserved in all these
+     * set of "/bitcoinj:1.0/MultiBit:1.0(Windows)/". Therefore the / ( and ) characters are reserved in all these
      * components. If you don't want to add a comment (recommended), pass null.<p>
      *
      * See <a href="https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki">BIP 14</a> for more information.
@@ -286,9 +263,9 @@ public class VersionMessage extends Message {
         checkSubVerComponent(version);
         if (comments != null) {
             checkSubVerComponent(comments);
-            subVer = subVer.concat(String.format("%s:%s(%s)/", name, version, comments));
+            subVer = subVer.concat(String.format(Locale.US, "%s:%s(%s)/", name, version, comments));
         } else {
-            subVer = subVer.concat(String.format("%s:%s/", name, version));
+            subVer = subVer.concat(String.format(Locale.US, "%s:%s/", name, version));
         }
     }
 
@@ -301,7 +278,7 @@ public class VersionMessage extends Message {
      * Returns true if the clientVersion field is >= Pong.MIN_PROTOCOL_VERSION. If it is then ping() is usable.
      */
     public boolean isPingPongSupported() {
-        return clientVersion >= Pong.MIN_PROTOCOL_VERSION;
+        return clientVersion >= params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.PONG);
     }
 
     /**
@@ -309,12 +286,17 @@ public class VersionMessage extends Message {
      * is available and the memory pool of the remote peer will be queried when the downloadData property is true.
      */
     public boolean isBloomFilteringSupported() {
-        return clientVersion >= FilteredBlock.MIN_PROTOCOL_VERSION && CoinDefinition.supportsBloomFiltering;
+        return clientVersion >= params.getProtocolVersionNum(NetworkParameters.ProtocolVersion.BLOOM_FILTER);
     }
 
     /** Returns true if the protocol version and service bits both indicate support for the getutxos message. */
     public boolean isGetUTXOsSupported() {
         return clientVersion >= GetUTXOsMessage.MIN_PROTOCOL_VERSION &&
                 (localServices & NODE_GETUTXOS) == NODE_GETUTXOS;
+    }
+
+    /** Returns true if a peer can be asked for blocks and transactions including witness data. */
+    public boolean isWitnessSupported() {
+        return (localServices & NODE_WITNESS) == NODE_WITNESS;
     }
 }

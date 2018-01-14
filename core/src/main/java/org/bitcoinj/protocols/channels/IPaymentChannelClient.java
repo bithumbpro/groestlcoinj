@@ -17,11 +17,14 @@
 package org.bitcoinj.protocols.channels;
 
 import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import com.google.protobuf.ByteString;
 import org.bitcoin.paymentchannel.Protos;
+import org.bitcoinj.wallet.SendRequest;
+import org.spongycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
 
@@ -44,7 +47,7 @@ public interface IPaymentChannelClient {
      * intending to reopen the channel later. There is likely little reason to use this in a stateless protocol.</p>
      *
      * <p>Note that this <b>MUST</b> still be called even after either
-     * {@link PaymentChannelClient.ClientConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)} or
+     * {@link org.bitcoinj.protocols.channels.IPaymentChannelClient.ClientConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)} or
      * {@link IPaymentChannelClient#settle()} is called, to actually handle the connection close logic.</p>
      */
     void connectionClosed();
@@ -53,7 +56,7 @@ public interface IPaymentChannelClient {
      * <p>Settles the channel, notifying the server it can broadcast the most recent payment transaction.</p>
      *
      * <p>Note that this only generates a CLOSE message for the server and calls
-     * {@link PaymentChannelClient.ClientConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)}
+     * {@link org.bitcoinj.protocols.channels.IPaymentChannelClient.ClientConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)}
      * to settle the connection, it does not actually handle connection close logic, and
      * {@link PaymentChannelClient#connectionClosed()} must still be called after the connection fully settles.</p>
      *
@@ -82,9 +85,12 @@ public interface IPaymentChannelClient {
      *                                  ({@link PaymentChannelClientConnection#state()}.getTotalValue())
      * @throws IllegalStateException If the channel has been closed or is not yet open
      *                               (see {@link PaymentChannelClientConnection#getChannelOpenFuture()} for the second)
+     * @throws ECKey.KeyIsEncryptedException If the keys are encrypted and no AES key has been provided,
      * @return a future that completes when the server acknowledges receipt and acceptance of the payment.
      */
-    ListenableFuture<PaymentIncrementAck> incrementPayment(Coin size, @Nullable ByteString info) throws ValueOutOfRangeException, IllegalStateException;
+    ListenableFuture<PaymentIncrementAck> incrementPayment(Coin size, @Nullable ByteString info,
+                                                           @Nullable KeyParameter userKey)
+            throws ValueOutOfRangeException, IllegalStateException, ECKey.KeyIsEncryptedException;
 
     /**
      * Implements the connection between this client and the server, providing an interface which allows messages to be
@@ -127,7 +133,7 @@ public interface IPaymentChannelClient {
          * @param expireTime The time, in seconds,  when this channel will be closed by the server. Note this is in absolute time, i.e. seconds since 1970-01-01T00:00:00.
          * @return <code>true</code> if the proposed time is acceptable <code>false</code> otherwise.
          */
-        public boolean acceptExpireTime(long expireTime);
+        boolean acceptExpireTime(long expireTime);
 
         /**
          * <p>Indicates the channel has been successfully opened and
@@ -140,6 +146,41 @@ public interface IPaymentChannelClient {
          * @param wasInitiated If true, the channel is newly opened. If false, it was resumed.
          */
         void channelOpen(boolean wasInitiated);
+    }
+
+    /**
+     * Set Client payment channel properties.
+     */
+    interface ClientChannelProperties {
+        /**
+         * Modify the sendRequest used for the contract.
+         * @param sendRequest the current sendRequest.
+         * @return the modified sendRequest.
+         */
+        SendRequest modifyContractSendRequest(SendRequest sendRequest);
+
+        /**
+         *  The maximum acceptable min payment. If the server suggests a higher amount
+         *  the channel creation will be aborted.
+         */
+        Coin acceptableMinPayment();
+
+        /**
+         *  The time in seconds, relative to now, on how long this channel should be kept open. Note that is is
+         *  a proposal to the server. The server may in turn propose something different.
+         *  See {@link org.bitcoinj.protocols.channels.IPaymentChannelClient.ClientConnection#acceptExpireTime(long)}
+         *
+         */
+        long timeWindow();
+
+        /**
+         * An enum indicating which versions to support:
+         * VERSION_1: use only version 1 of the protocol
+         * VERSION_2_ALLOW_1: suggest version 2 but allow downgrade to version 1
+         * VERSION_2: suggest version 2 and enforce use of version 2
+         *
+         */
+        PaymentChannelClient.VersionSelector versionSelector();
     }
 
     /**

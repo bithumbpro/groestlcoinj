@@ -52,9 +52,9 @@ public class Networks {
     private static final Pattern gridcoinFamily = Pattern.compile(".*(gridcoin).*");
 
     /** Registered networks */
-    private static Set<NetworkParameters> networks = ImmutableSet.of(TestNet3Params.get(), MainNetParams.get());
+    private static Set<? extends NetworkParameters> networks = ImmutableSet.of(TestNet3Params.get(), MainNetParams.get());
 
-    public static Set<NetworkParameters> get() {
+    public static Set<? extends NetworkParameters> get() {
         return networks;
     }
 

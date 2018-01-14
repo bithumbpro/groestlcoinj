@@ -1,5 +1,6 @@
-/**
+/*
  * Copyright 2011 Google Inc.
+ * Copyright 2015 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,10 +24,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Abstract superclass of classes with list based payload, ie InventoryMessage and GetDataMessage.
+ * <p>Abstract superclass of classes with list based payload, ie InventoryMessage and GetDataMessage.</p>
+ * 
+ * <p>Instances of this class are not safe for use by multiple threads.</p>
  */
 public abstract class ListMessage extends Message {
-    private static final long serialVersionUID = -4275896329391143643L;
 
     private long arrayLen;
     // For some reason the compiler complains if this is inside InventoryItem
@@ -38,19 +40,18 @@ public abstract class ListMessage extends Message {
         super(params, bytes, 0);
     }
 
-    public ListMessage(NetworkParameters params, byte[] payload, boolean parseLazy, boolean parseRetain, int length)
+    public ListMessage(NetworkParameters params, byte[] payload, MessageSerializer serializer, int length)
             throws ProtocolException {
-        super(params, payload, 0, parseLazy, parseRetain, length);
+        super(params, payload, 0, serializer, length);
     }
 
     public ListMessage(NetworkParameters params) {
         super(params);
-        items = new ArrayList<InventoryItem>();
+        items = new ArrayList<>();
         length = 1; //length of 0 varint;
     }
 
     public List<InventoryItem> getItems() {
-        maybeParse();
         return Collections.unmodifiableList(items);
     }
 
@@ -69,39 +70,30 @@ public abstract class ListMessage extends Message {
     }
 
     @Override
-    protected void parseLite() throws ProtocolException {
+    protected void parse() throws ProtocolException {
         arrayLen = readVarInt();
         if (arrayLen > MAX_INVENTORY_ITEMS)
             throw new ProtocolException("Too many items in INV message: " + arrayLen);
         length = (int) (cursor - offset + (arrayLen * InventoryItem.MESSAGE_LENGTH));
-    }
 
-    @Override
-    public void parse() throws ProtocolException {
         // An inv is vector<CInv> where CInv is int+hash. The int is either 1 or 2 for tx or block.
-        items = new ArrayList<InventoryItem>((int) arrayLen);
+        items = new ArrayList<>((int) arrayLen);
         for (int i = 0; i < arrayLen; i++) {
             if (cursor + InventoryItem.MESSAGE_LENGTH > payload.length) {
                 throw new ProtocolException("Ran off the end of the INV");
             }
             int typeCode = (int) readUint32();
-            InventoryItem.Type type;
+            InventoryItem.Type type = InventoryItem.Type.parse(typeCode);
             // See ppszTypeName in net.h
-            switch (typeCode) {
-                case 0:
-                    type = InventoryItem.Type.Error;
-                    break;
-                case 1:
-                    type = InventoryItem.Type.Transaction;
-                    break;
-                case 2:
-                    type = InventoryItem.Type.Block;
-                    break;
-                case 3:
-                    type = InventoryItem.Type.FilteredBlock;
-                    break;
-                default:
-                    throw new ProtocolException("Unknown CInv type: " + typeCode);
+            if (type == null
+                    || (type != InventoryItem.Type.Error
+                        && type != InventoryItem.Type.Block
+                        && type != InventoryItem.Type.Transaction
+                        && type != InventoryItem.Type.FilteredBlock
+                        && type != InventoryItem.Type.WitnessBlock
+                        && type != InventoryItem.Type.WitnessTransaction
+                        && type != InventoryItem.Type.FilteredWitnessBlock)) {
+                throw new ProtocolException("Unknown CInv type: " + typeCode);
             }
             InventoryItem item = new InventoryItem(type, readHash());
             items.add(item);
@@ -114,9 +106,9 @@ public abstract class ListMessage extends Message {
         stream.write(new VarInt(items.size()).encode());
         for (InventoryItem i : items) {
             // Write out the type code.
-            Utils.uint32ToByteStreamLE(i.type.ordinal(), stream);
+            Utils.uint32ToByteStreamLE(i.type.code(), stream);
             // And now the hash.
-            stream.write(Utils.reverseBytes(i.hash.getBytes()));
+            stream.write(i.hash.getReversedBytes());
         }
     }
 
@@ -124,8 +116,7 @@ public abstract class ListMessage extends Message {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        ListMessage other = (ListMessage) o;
-        return items.equals(other.items);
+        return items.equals(((ListMessage)o).items);
     }
 
     @Override

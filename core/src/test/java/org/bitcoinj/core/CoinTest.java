@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2014 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
-import org.junit.Assert;
 import org.junit.Test;
 
 public class CoinTest {
@@ -39,8 +38,23 @@ public class CoinTest {
         try {
             parseCoin("2E-20");
             org.junit.Assert.fail("should not have accepted fractional satoshis");
-        } catch (ArithmeticException e) {
+        } catch (IllegalArgumentException expected) {
+        } catch (Exception e) {
+            org.junit.Assert.fail("should throw IllegalArgumentException");
         }
+        assertEquals(1, parseCoin("0.00000001").value);
+        assertEquals(1, parseCoin("0.000000010").value);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testParseCoinOverprecise() {
+        parseCoin("0.000000011");
+    }
+
+    @Test
+    public void testParseCoinInexact() {
+        assertEquals(1, parseCoinInexact("0.00000001").value);
+        assertEquals(1, parseCoinInexact("0.000000011").value);
     }
 
     @Test
@@ -51,16 +65,10 @@ public class CoinTest {
         assertEquals(NEGATIVE_SATOSHI, valueOf(-1));
         assertEquals(MAX_MONEY, valueOf(MAX_MONEY.value));
         assertEquals(MAX_MONEY.negate(), valueOf(MAX_MONEY.value * -1));
-        try {
-            valueOf(MAX_MONEY.value + 1);
-            org.junit.Assert.fail("should not have accepted too-great a monetary value");
-        } catch (IllegalArgumentException e) {
-        }
-        try {
-            valueOf( (MAX_MONEY.value * -1) - 1);
-            org.junit.Assert.fail("should not have accepted too-little a monetary value");
-        } catch (IllegalArgumentException e) {
-        }
+        valueOf(MAX_MONEY.value + 1);
+        valueOf((MAX_MONEY.value * -1) - 1);
+        valueOf(Long.MAX_VALUE);
+        valueOf(Long.MIN_VALUE);
 
         try {
             valueOf(Long.MIN_VALUE);
@@ -97,6 +105,26 @@ public class CoinTest {
         assertFalse(valueOf(2).isLessThan(valueOf(1)));
     }
 
+    @Test(expected = ArithmeticException.class)
+    public void testMultiplicationOverflow() {
+        Coin.valueOf(Long.MAX_VALUE).multiply(2);
+    }
+
+    @Test(expected = ArithmeticException.class)
+    public void testMultiplicationUnderflow() {
+        Coin.valueOf(Long.MIN_VALUE).multiply(2);
+    }
+
+    @Test(expected = ArithmeticException.class)
+    public void testAdditionOverflow() {
+        Coin.valueOf(Long.MAX_VALUE).add(Coin.SATOSHI);
+    }
+
+    @Test(expected = ArithmeticException.class)
+    public void testSubstractionUnderflow() {
+        Coin.valueOf(Long.MIN_VALUE).subtract(Coin.SATOSHI);
+    }
+
     @Test
     public void testToFriendlyString() {
         assertEquals("1.00 BTC", COIN.toFriendlyString());
@@ -121,10 +149,7 @@ public class CoinTest {
         assertEquals("54321.12345", parseCoin("54321.12345").toPlainString());
         assertEquals("654321.123456", parseCoin("654321.123456").toPlainString());
         assertEquals("7654321.1234567", parseCoin("7654321.1234567").toPlainString());
-//        try {
-//            assertEquals("87654321.12345678", parseCoin("87654321.12345678").toPlainString());
-//            Assert.fail();  // More than MAX_MONEY
-//        } catch (Exception e) {}
+        assertEquals("87654321.12345678", parseCoin("87654321.12345678").toPlainString());
 
         // check there are no trailing zeros
         assertEquals("1", parseCoin("1.0").toPlainString());

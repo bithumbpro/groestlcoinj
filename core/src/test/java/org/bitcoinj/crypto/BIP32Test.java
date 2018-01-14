@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2013 Matija Mazi.
  * Copyright 2014 Andreas Schildbach
  *
@@ -17,17 +17,19 @@
 
 package org.bitcoinj.crypto;
 
-import org.bitcoinj.core.AddressFormatException;
 import org.bitcoinj.core.Base58;
 import com.google.common.base.Functions;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
+import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.params.MainNetParams;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 import static org.bitcoinj.core.Utils.HEX;
 import static org.junit.Assert.assertEquals;
@@ -112,6 +114,19 @@ public class BIP32Test {
                                     "xpub6FnCn6nSzZAw5Tw7cgR9bi15UV96gLZhjDstkXXxvCLsUXBGXPdSnLFbdpq8p9HmGsApME5hQTZ3emM2rnY5agb9rXpVGyy3bdW6EEgAtqt"
                             )
                     )
+            ),
+            new HDWTestVector(
+                    "4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be",
+                    "xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6",
+                    "xpub661MyMwAqRbcEZVB4dScxMAdx6d4nFc9nvyvH3v4gJL378CSRZiYmhRoP7mBy6gSPSCYk6SzXPTf3ND1cZAceL7SfJ1Z3GC8vBgp2epUt13",
+                    Arrays.asList(
+                            new HDWTestVector.DerivedTestCase(
+                                    "Test3 m/0H",
+                                    new ChildNumber[]{new ChildNumber(0, true)},
+                                    "xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L",
+                                    "xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y"
+                            )
+                   )
             )
     };
 
@@ -125,25 +140,31 @@ public class BIP32Test {
         testVector(1);
     }
 
-    private void testVector(int testCase) throws AddressFormatException {
+    @Test
+    public void testVector3() throws Exception {
+        testVector(2);
+    }
+
+    private void testVector(int testCase) {
         log.info("=======  Test vector {}", testCase);
         HDWTestVector tv = tvs[testCase];
+        NetworkParameters params = MainNetParams.get();
         DeterministicKey masterPrivateKey = HDKeyDerivation.createMasterPrivateKey(HEX.decode(tv.seed));
-        assertEquals(testEncode(tv.priv), testEncode(masterPrivateKey.serializePrivB58()));
-        assertEquals(testEncode(tv.pub), testEncode(masterPrivateKey.serializePubB58()));
+        assertEquals(testEncode(tv.priv), testEncode(masterPrivateKey.serializePrivB58(params)));
+        assertEquals(testEncode(tv.pub), testEncode(masterPrivateKey.serializePubB58(params)));
         DeterministicHierarchy dh = new DeterministicHierarchy(masterPrivateKey);
         for (int i = 0; i < tv.derived.size(); i++) {
             HDWTestVector.DerivedTestCase tc = tv.derived.get(i);
             log.info("{}", tc.name);
-            assertEquals(tc.name, String.format("Test%d %s", testCase + 1, tc.getPathDescription()));
+            assertEquals(tc.name, String.format(Locale.US, "Test%d %s", testCase + 1, tc.getPathDescription()));
             int depth = tc.path.length - 1;
             DeterministicKey ehkey = dh.deriveChild(Arrays.asList(tc.path).subList(0, depth), false, true, tc.path[depth]);
-            assertEquals(testEncode(tc.priv), testEncode(ehkey.serializePrivB58()));
-            assertEquals(testEncode(tc.pub), testEncode(ehkey.serializePubB58()));
+            assertEquals(testEncode(tc.priv), testEncode(ehkey.serializePrivB58(params)));
+            assertEquals(testEncode(tc.pub), testEncode(ehkey.serializePubB58(params)));
         }
     }
 
-    private String testEncode(String what) throws AddressFormatException {
+    private String testEncode(String what) {
         return HEX.encode(Base58.decodeChecked(what));
     }
 

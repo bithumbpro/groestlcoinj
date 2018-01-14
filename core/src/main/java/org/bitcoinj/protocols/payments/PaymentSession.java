@@ -1,4 +1,6 @@
-/**
+/*
+ * Copyright by the original author or authors.
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -20,6 +22,8 @@ import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.protocols.payments.PaymentProtocol.PkiVerificationData;
 import org.bitcoinj.uri.BitcoinURI;
 import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.SendRequest;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -44,8 +48,8 @@ import java.util.concurrent.Callable;
  *
  * <ul>
  * <li>A {@link BitcoinURI} object that conforms to BIP 0072</li>
- * <li>A url where the {@link Protos.PaymentRequest} can be fetched</li>
- * <li>Directly with a {@link Protos.PaymentRequest} object</li>
+ * <li>A url where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} can be fetched</li>
+ * <li>Directly with a {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object</li>
  * </ul>
  *
  * <p>If initialized with a BitcoinURI or a url, a network request is made for the payment request object and a
@@ -55,10 +59,10 @@ import java.util.concurrent.Callable;
  * amount and recipient are correct, perform any additional steps, and then construct a list of transactions to pass to
  * the sendPayment method.</p>
  *
- * <p>Call sendPayment with a list of transactions that will be broadcast. A {@link Protos.Payment} message will be sent
+ * <p>Call sendPayment with a list of transactions that will be broadcast. A {@link org.bitcoin.protocols.payments.Protos.Payment} message will be sent
  * to the merchant if a payment url is provided in the PaymentRequest. NOTE: sendPayment does NOT broadcast the
  * transactions to the bitcoin network. Instead it returns a ListenableFuture that will be notified when a
- * {@link Protos.PaymentACK} is received from the merchant. Typically a wallet will show the message to the user
+ * {@link org.bitcoin.protocols.payments.Protos.PaymentACK} is received from the merchant. Typically a wallet will show the message to the user
  * as a confirmation message that the payment is now "processing" or that an error occurred, and then broadcast the
  * tx itself later if needed.</p>
  *
@@ -67,7 +71,6 @@ import java.util.concurrent.Callable;
 public class PaymentSession {
     private static ListeningExecutorService executor = Threading.THREAD_POOL;
     private NetworkParameters params;
-    private final TrustStoreLoader trustStoreLoader;
     private Protos.PaymentRequest paymentRequest;
     private Protos.PaymentDetails paymentDetails;
     private Coin totalValue = Coin.ZERO;
@@ -80,7 +83,7 @@ public class PaymentSession {
 
     /**
      * <p>Returns a future that will be notified with a PaymentSession object after it is fetched using the provided uri.
-     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link Protos.PaymentRequest} object may
+     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may
      * be fetched in the r= parameter.</p>
      *
      * <p>If the payment request object specifies a PKI method, then the system trust store will be used to verify
@@ -93,7 +96,7 @@ public class PaymentSession {
 
     /**
      * Returns a future that will be notified with a PaymentSession object after it is fetched using the provided uri.
-     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link Protos.PaymentRequest} object may
+     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may
      * be fetched in the r= parameter.
      * If verifyPki is specified and the payment request object specifies a PKI method, then the system trust store will
      * be used to verify the signature provided by the payment request. An exception is thrown by the future if the
@@ -106,7 +109,7 @@ public class PaymentSession {
 
     /**
      * Returns a future that will be notified with a PaymentSession object after it is fetched using the provided uri.
-     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link Protos.PaymentRequest} object may
+     * uri is a BIP-72-style BitcoinURI object that specifies where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may
      * be fetched in the r= parameter.
      * If verifyPki is specified and the payment request object specifies a PKI method, then the system trust store will
      * be used to verify the signature provided by the payment request. An exception is thrown by the future if the
@@ -127,7 +130,7 @@ public class PaymentSession {
 
     /**
      * Returns a future that will be notified with a PaymentSession object after it is fetched using the provided url.
-     * url is an address where the {@link Protos.PaymentRequest} object may be fetched.
+     * url is an address where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may be fetched.
      * If verifyPki is specified and the payment request object specifies a PKI method, then the system trust store will
      * be used to verify the signature provided by the payment request. An exception is thrown by the future if the
      * signature cannot be verified.
@@ -138,7 +141,7 @@ public class PaymentSession {
 
     /**
      * Returns a future that will be notified with a PaymentSession object after it is fetched using the provided url.
-     * url is an address where the {@link Protos.PaymentRequest} object may be fetched.
+     * url is an address where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may be fetched.
      * If the payment request object specifies a PKI method, then the system trust store will
      * be used to verify the signature provided by the payment request. An exception is thrown by the future if the
      * signature cannot be verified.
@@ -150,7 +153,7 @@ public class PaymentSession {
 
     /**
      * Returns a future that will be notified with a PaymentSession object after it is fetched using the provided url.
-     * url is an address where the {@link Protos.PaymentRequest} object may be fetched.
+     * url is an address where the {@link org.bitcoin.protocols.payments.Protos.PaymentRequest} object may be fetched.
      * If the payment request object specifies a PKI method, then the system trust store will
      * be used to verify the signature provided by the payment request. An exception is thrown by the future if the
      * signature cannot be verified.
@@ -181,7 +184,7 @@ public class PaymentSession {
     }
 
     /**
-     * Creates a PaymentSession from the provided {@link Protos.PaymentRequest}.
+     * Creates a PaymentSession from the provided {@link org.bitcoin.protocols.payments.Protos.PaymentRequest}.
      * Verifies PKI by default.
      */
     public PaymentSession(Protos.PaymentRequest request) throws PaymentProtocolException {
@@ -189,7 +192,7 @@ public class PaymentSession {
     }
 
     /**
-     * Creates a PaymentSession from the provided {@link Protos.PaymentRequest}.
+     * Creates a PaymentSession from the provided {@link org.bitcoin.protocols.payments.Protos.PaymentRequest}.
      * If verifyPki is true, also validates the signature and throws an exception if it fails.
      */
     public PaymentSession(Protos.PaymentRequest request, boolean verifyPki) throws PaymentProtocolException {
@@ -197,16 +200,16 @@ public class PaymentSession {
     }
 
     /**
-     * Creates a PaymentSession from the provided {@link Protos.PaymentRequest}.
+     * Creates a PaymentSession from the provided {@link org.bitcoin.protocols.payments.Protos.PaymentRequest}.
      * If verifyPki is true, also validates the signature and throws an exception if it fails.
      * If trustStoreLoader is null, the system default trust store is used.
      */
     public PaymentSession(Protos.PaymentRequest request, boolean verifyPki, @Nullable final TrustStoreLoader trustStoreLoader) throws PaymentProtocolException {
-        this.trustStoreLoader = trustStoreLoader != null ? trustStoreLoader : new TrustStoreLoader.DefaultTrustStoreLoader();
+        TrustStoreLoader nonNullTrustStoreLoader = trustStoreLoader != null ? trustStoreLoader : new TrustStoreLoader.DefaultTrustStoreLoader();
         parsePaymentRequest(request);
         if (verifyPki) {
             try {
-                pkiVerificationData = PaymentProtocol.verifyPaymentRequestPki(request, this.trustStoreLoader.getKeyStore());
+                pkiVerificationData = PaymentProtocol.verifyPaymentRequestPki(request, nonNullTrustStoreLoader.getKeyStore());
             } catch (IOException x) {
                 throw new PaymentProtocolException(x);
             } catch (KeyStoreException x) {
@@ -221,7 +224,7 @@ public class PaymentSession {
      * Returns the outputs of the payment request.
      */
     public List<PaymentProtocol.Output> getOutputs() {
-        List<PaymentProtocol.Output> outputs = new ArrayList<PaymentProtocol.Output>(paymentDetails.getOutputsCount());
+        List<PaymentProtocol.Output> outputs = new ArrayList<>(paymentDetails.getOutputsCount());
         for (Protos.Output output : paymentDetails.getOutputsList()) {
             Coin amount = output.hasAmount() ? Coin.valueOf(output.getAmount()) : null;
             outputs.add(new PaymentProtocol.Output(amount, output.getScript().toByteArray()));
@@ -274,7 +277,8 @@ public class PaymentSession {
      * Returns the payment url where the Payment message should be sent.
      * Returns null if no payment url was provided in the PaymentRequest.
      */
-    public @Nullable String getPaymentUrl() {
+    @Nullable
+    public String getPaymentUrl() {
         if (paymentDetails.hasPaymentUrl())
             return paymentDetails.getPaymentUrl();
         return null;
@@ -291,13 +295,13 @@ public class PaymentSession {
     }
 
     /**
-     * Returns a {@link Wallet.SendRequest} suitable for broadcasting to the network.
+     * Returns a {@link SendRequest} suitable for broadcasting to the network.
      */
-    public Wallet.SendRequest getSendRequest() {
+    public SendRequest getSendRequest() {
         Transaction tx = new Transaction(params);
         for (Protos.Output output : paymentDetails.getOutputsList())
             tx.addOutput(new TransactionOutput(params, tx, Coin.valueOf(output.getAmount()), output.getScript().toByteArray()));
-        return Wallet.SendRequest.forTx(tx).fromPaymentDetails(paymentDetails);
+        return SendRequest.forTx(tx).fromPaymentDetails(paymentDetails);
     }
 
     /**
@@ -311,7 +315,8 @@ public class PaymentSession {
      * @param refundAddr will be used by the merchant to send money back if there was a problem.
      * @param memo is a message to include in the payment message sent to the merchant.
      */
-    public @Nullable ListenableFuture<PaymentProtocol.Ack> sendPayment(List<Transaction> txns, @Nullable Address refundAddr, @Nullable String memo)
+    @Nullable
+    public ListenableFuture<PaymentProtocol.Ack> sendPayment(List<Transaction> txns, @Nullable Address refundAddr, @Nullable String memo)
             throws PaymentProtocolException, VerificationException, IOException {
         Protos.Payment payment = getPayment(txns, refundAddr, memo);
         if (payment == null)
@@ -335,7 +340,8 @@ public class PaymentSession {
      * @param refundAddr will be used by the merchant to send money back if there was a problem.
      * @param memo is a message to include in the payment message sent to the merchant.
      */
-    public @Nullable Protos.Payment getPayment(List<Transaction> txns, @Nullable Address refundAddr, @Nullable String memo)
+    @Nullable
+    public Protos.Payment getPayment(List<Transaction> txns, @Nullable Address refundAddr, @Nullable String memo)
             throws IOException, PaymentProtocolException.InvalidNetwork {
         if (paymentDetails.hasPaymentUrl()) {
             for (Transaction tx : txns)
@@ -401,7 +407,7 @@ public class PaymentSession {
             }
             // This won't ever happen in practice. It would only happen if the user provided outputs
             // that are obviously invalid. Still, we don't want to silently overflow.
-            if (totalValue.compareTo(NetworkParameters.MAX_MONEY) > 0)
+            if (params.hasMaxMoney() && totalValue.compareTo(params.getMaxMoney()) > 0)
                 throw new PaymentProtocolException.InvalidOutputs("The outputs are way too big.");
         } catch (InvalidProtocolBufferException e) {
             throw new PaymentProtocolException(e);

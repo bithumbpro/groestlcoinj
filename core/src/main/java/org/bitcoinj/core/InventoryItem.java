@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,18 +16,43 @@
 
 package org.bitcoinj.core;
 
+import com.google.common.base.Objects;
+
 public class InventoryItem {
-    
+
     /**
      * 4 byte uint32 type field + 32 byte hash
      */
     static final int MESSAGE_LENGTH = 36;
-    
+
+    static final int WITNESS_FLAG = 1 << 30;
+
     public enum Type {
-        Error,
-        Transaction,
-        Block,
-        FilteredBlock
+        Error(0),
+        Transaction(1),
+        Block(2),
+        FilteredBlock(3),
+        WitnessBlock(Block.code | WITNESS_FLAG),
+        WitnessTransaction(Transaction.code | WITNESS_FLAG),
+        FilteredWitnessBlock(FilteredBlock.code | WITNESS_FLAG);
+
+        private int code;
+        Type(int code) {
+            this.code = code;
+        }
+
+        public int code() {
+            return code;
+        }
+
+        public static Type parse(int code) {
+            for (Type type : values()) {
+                if (type.code() == code) {
+                    return type;
+                }
+            }
+            return null;
+        }
     }
 
     public final Type type;
@@ -38,10 +63,9 @@ public class InventoryItem {
         this.hash = hash;
     }
 
-
     @Override
     public String toString() {
-        return type.toString() + ": " + hash;
+        return type + ": " + hash;
     }
 
     @Override
@@ -49,12 +73,15 @@ public class InventoryItem {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         InventoryItem other = (InventoryItem) o;
-        return type == other.type &&
-               hash.equals(other.hash);
+        return type == other.type && hash.equals(other.hash);
     }
 
     @Override
     public int hashCode() {
-        return hash.hashCode() + type.ordinal();
+        return Objects.hashCode(type, hash);
+    }
+
+    InventoryItem toWitnessItem() {
+        return new InventoryItem(Type.parse(type.code() | WITNESS_FLAG), hash);
     }
 }

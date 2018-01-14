@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2014 Kosta Korenkov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.bitcoinj.wallet;
 
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.script.Script;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -39,7 +39,7 @@ public class RedeemData {
 
     private RedeemData(List<ECKey> keys, Script redeemScript) {
         this.redeemScript = redeemScript;
-        List<ECKey> sortedKeys = new ArrayList<ECKey>(keys);
+        List<ECKey> sortedKeys = new ArrayList<>(keys);
         Collections.sort(sortedKeys, ECKey.PUBKEY_COMPARATOR);
         this.keys = sortedKeys;
     }
@@ -54,25 +54,16 @@ public class RedeemData {
      */
     public static RedeemData of(ECKey key, Script program) {
         checkArgument(program.isSentToAddress() || program.isSentToRawPubKey());
-        return key != null ? new RedeemData(Arrays.asList(key), program) : null;
+        return key != null ? new RedeemData(Collections.singletonList(key), program) : null;
     }
 
     /**
      * Returns the first key that has private bytes
      */
     public ECKey getFullKey() {
-        for (ECKey key : keys) {
-            //TODO: don't use exception catching here to test. It's better to use hasPrivKey, but currently it's not working
-            // as expected for DeterministicKeys (it doesn't test if it's possible to derive private key)
-            try {
-                if (key.getPrivKey() != null)
-                    return key;
-            } catch (IllegalStateException e) {
-                // no private bytes. Proceed to the next key
-            } catch (ECKey.MissingPrivateKeyException e) {
-
-            }
-        }
+        for (ECKey key : keys)
+            if (key.hasPrivKey())
+                return key;
         return null;
     }
 }

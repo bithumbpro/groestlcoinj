@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
 
 package org.bitcoinj.store;
 
+import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.StoredBlock;
 
@@ -24,7 +25,7 @@ import org.bitcoinj.core.StoredBlock;
  * different ways. An in-memory implementation (MemoryBlockStore) exists for unit testing but real apps will want to
  * use implementations that save to disk.<p>
  *
- * A BlockStore is a map of hashes to StoredBlock. The hash is the double digest of the BitCoin serialization
+ * A BlockStore is a map of hashes to StoredBlock. The hash is the double digest of the Bitcoin serialization
  * of the block header, <b>not</b> the header with the extra data as well.<p>
  *
  * BlockStores are thread safe.
@@ -59,6 +60,9 @@ public interface BlockStore {
     /** Closes the store. */
     void close() throws BlockStoreException;
 
-    long getMedianTimePast(StoredBlock block) throws BlockStoreException;
-
+    /**
+     * Get the {@link org.bitcoinj.core.NetworkParameters} of this store.
+     * @return The network params.
+     */
+    NetworkParameters getParams();
 }

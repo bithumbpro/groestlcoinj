@@ -17,7 +17,6 @@
 package org.bitcoinj.wallet;
 
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.Wallet;
 
 import java.util.List;
 
@@ -32,15 +31,15 @@ import java.util.List;
  * <p>A factory interface is provided. The wallet will use this to analyze new pending transactions.</p>
  */
 public interface RiskAnalysis {
-    public enum Result {
+    enum Result {
         OK,
         NON_FINAL,
         NON_STANDARD
     }
 
-    public Result analyze();
+    Result analyze();
 
-    public interface Analyzer {
-        public RiskAnalysis create(Wallet wallet, Transaction tx, List<Transaction> dependencies);
+    interface Analyzer {
+        RiskAnalysis create(Wallet wallet, Transaction tx, List<Transaction> dependencies);
     }
 }

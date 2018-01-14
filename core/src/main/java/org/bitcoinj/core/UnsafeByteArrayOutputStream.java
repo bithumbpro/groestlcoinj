@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2011 Steve Coughlan.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.bitcoinj.core;
 
 import java.io.ByteArrayOutputStream;
@@ -63,7 +64,7 @@ public class UnsafeByteArrayOutputStream extends ByteArrayOutputStream {
      * @param len the number of bytes to write.
      */
     @Override
-    public void write(byte b[], int off, int len) {
+    public void write(byte[] b, int off, int len) {
         if ((off < 0) || (off > b.length) || (len < 0) ||
                 ((off + len) > b.length) || ((off + len) < 0)) {
             throw new IndexOutOfBoundsException();

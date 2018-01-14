@@ -1,3 +1,19 @@
+/*
+ * Copyright by the original author or authors.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.bitcoinj.crypto;
 
 import org.spongycastle.math.ec.ECCurve;
@@ -147,7 +163,7 @@ public class LazyECPoint {
     }
 
     public ECFieldElement getY() {
-        return get().getY();
+        return this.normalize().getYCoord();
     }
 
     public ECPoint twice() {
@@ -163,25 +179,22 @@ public class LazyECPoint {
     }
 
     public ECFieldElement getX() {
-        return get().getX();
+        return this.normalize().getXCoord();
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        LazyECPoint point1 = (LazyECPoint) o;
-        if (bits != null && point1.bits != null)
-            return Arrays.equals(bits, point1.bits);
-        else
-            return get().equals(point1.get());
+        return Arrays.equals(getCanonicalEncoding(), ((LazyECPoint)o).getCanonicalEncoding());
     }
 
     @Override
     public int hashCode() {
-        if (bits != null)
-            return Arrays.hashCode(bits);
-        else
-            return get().hashCode();
+        return Arrays.hashCode(getCanonicalEncoding());
+    }
+
+    private byte[] getCanonicalEncoding() {
+        return getEncoded(true);
     }
 }

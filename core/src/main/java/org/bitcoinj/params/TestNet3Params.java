@@ -18,9 +18,15 @@
 package org.bitcoinj.params;
 
 import org.bitcoinj.core.CoinDefinition;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.Utils;
+import java.math.BigInteger;
+import java.util.Date;
+import java.util.EnumSet;
+
+import org.bitcoinj.core.*;
+import org.bitcoinj.script.Script;
+import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
+import org.bitcoinj.utils.VersionTally;
 
 import static com.google.common.base.Preconditions.checkState;
 
@@ -28,7 +34,9 @@ import static com.google.common.base.Preconditions.checkState;
  * Parameters for the testnet, a separate public instance of Bitcoin that has relaxed rules suitable for development
  * and testing of applications and new Bitcoin versions.
  */
-public class TestNet3Params extends NetworkParameters {
+public class TestNet3Params extends AbstractBitcoinNetParams {
+    public static final int SEGWIT_ENFORCE_HEIGHT = 834624; // TODO: implement BIP-9 instead
+
     public TestNet3Params() {
         super();
         id = ID_TESTNET;
@@ -59,6 +67,12 @@ public class TestNet3Params extends NetworkParameters {
         dnsSeeds = CoinDefinition.testnetDnsSeeds;
 
 
+        bip32HeaderPub = 0x043587CF;
+        bip32HeaderPriv = 0x04358394;
+
+        majorityEnforceBlockUpgrade = TestNet2Params.TESTNET_MAJORITY_ENFORCE_BLOCK_UPGRADE;
+        majorityRejectBlockOutdated = TestNet2Params.TESTNET_MAJORITY_REJECT_BLOCK_OUTDATED;
+        majorityWindow = TestNet2Params.TESTNET_MAJORITY_WINDOW;
     }
 
     private static TestNet3Params instance;
@@ -72,5 +86,65 @@ public class TestNet3Params extends NetworkParameters {
     @Override
     public String getPaymentProtocolId() {
         return PAYMENT_PROTOCOL_ID_TESTNET;
+    }
+
+    // February 16th 2012
+    private static final Date testnetDiffDate = new Date(1329264000000L);
+
+    @Override
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+        final BlockStore blockStore) throws VerificationException, BlockStoreException {
+        if (!isDifficultyTransitionPoint(storedPrev.getHeight()) && nextBlock.getTime().after(testnetDiffDate)) {
+            Block prev = storedPrev.getHeader();
+
+            // After 15th February 2012 the rules on the testnet change to avoid people running up the difficulty
+            // and then leaving, making it too hard to mine a block. On non-difficulty transition points, easy
+            // blocks are allowed if there has been a span of 20 minutes without one.
+            final long timeDelta = nextBlock.getTimeSeconds() - prev.getTimeSeconds();
+            // There is an integer underflow bug in bitcoin-qt that means mindiff blocks are accepted when time
+            // goes backwards.
+            if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 2) {
+        	// Walk backwards until we find a block that doesn't have the easiest proof of work, then check
+        	// that difficulty is equal to that one.
+        	StoredBlock cursor = storedPrev;
+        	while (!cursor.getHeader().equals(getGenesisBlock()) &&
+                       cursor.getHeight() % getInterval() != 0 &&
+                       cursor.getHeader().getDifficultyTargetAsInteger().equals(getMaxTarget()))
+                    cursor = cursor.getPrev(blockStore);
+        	BigInteger cursorTarget = cursor.getHeader().getDifficultyTargetAsInteger();
+        	BigInteger newTarget = nextBlock.getDifficultyTargetAsInteger();
+        	if (!cursorTarget.equals(newTarget))
+                    throw new VerificationException("Testnet block transition that is not allowed: " +
+                	Long.toHexString(cursor.getHeader().getDifficultyTarget()) + " vs " +
+                	Long.toHexString(nextBlock.getDifficultyTarget()));
+            }
+        } else {
+            super.checkDifficultyTransitions(storedPrev, nextBlock, blockStore);
+        }
+    }
+
+    // TODO: implement BIP-9 instead
+    @Override
+    public EnumSet<Script.VerifyFlag> getTransactionVerificationFlags(
+        final Block block,
+        final Transaction transaction,
+        final VersionTally tally,
+        final Integer height)
+    {
+        final EnumSet<Script.VerifyFlag> flags = super.getTransactionVerificationFlags(block, transaction, tally, height);
+        if (height >= SEGWIT_ENFORCE_HEIGHT) flags.add(Script.VerifyFlag.SEGWIT);
+        return flags;
+    }
+
+    // TODO: implement BIP-9 instead
+    @Override
+    public EnumSet<Block.VerifyFlag> getBlockVerificationFlags(
+            final Block block,
+            final VersionTally tally,
+            final Integer height)
+    {
+        EnumSet<Block.VerifyFlag> flags = super.getBlockVerificationFlags(block, tally, height);
+        if (height >= SEGWIT_ENFORCE_HEIGHT) flags.add(Block.VerifyFlag.SEGWIT);
+        return flags;
     }
 }

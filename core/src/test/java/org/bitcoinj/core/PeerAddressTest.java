@@ -20,6 +20,7 @@ package org.bitcoinj.core;
 import org.bitcoinj.params.MainNetParams;
 import org.junit.Test;
 
+import java.math.BigInteger;
 import java.net.InetAddress;
 
 import static org.bitcoinj.core.Utils.HEX;
@@ -33,13 +34,13 @@ public class PeerAddressTest
         String fromSpec = "010000000000000000000000000000000000ffff0a000001208d";
         PeerAddress pa = new PeerAddress(MainNetParams.get(),
                 HEX.decode(fromSpec), 0, 0);
-        String reserialized = Utils.HEX.encode(pa.bitcoinSerialize());
+        String reserialized = Utils.HEX.encode(pa.unsafeBitcoinSerialize());
         assertEquals(reserialized,fromSpec );
     }
 
     @Test
     public void testBitcoinSerialize() throws Exception {
-        PeerAddress pa = new PeerAddress(InetAddress.getByName(null), 8333, 0);
+        PeerAddress pa = new PeerAddress(MainNetParams.get(), InetAddress.getByName(null), 8333, 0, BigInteger.ZERO);
         assertEquals("000000000000000000000000000000000000ffff7f000001208d",
                 Utils.HEX.encode(pa.bitcoinSerialize()));
     }
