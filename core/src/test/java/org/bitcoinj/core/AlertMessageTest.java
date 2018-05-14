@@ -19,6 +19,7 @@ package org.bitcoinj.core;
 
 import org.bitcoinj.params.UnitTestParams;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.bitcoinj.core.Utils.HEX;
@@ -41,6 +42,7 @@ public class AlertMessageTest {
     }
 
     @Test
+    @Ignore //obsolete
     public void deserialize() throws Exception {
         // A CAlert taken from Bitcoin Core.
         // TODO: This does not check the subVer or set fields. Support proper version matching.

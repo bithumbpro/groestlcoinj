@@ -62,7 +62,7 @@ public class Base58Test extends TestCase {
         //from client
         Base58.decodeChecked("FkknEYnex1MeZyPRnEebFK5ZBHHsFZbvaf");
         //From app
-        Base58.decodeChecked("Fr5yywEHZm6XSfRX9stZWptLvKjzh6pTaq");
+        Base58.decodeChecked("Fr5yywEHZm6XSfRX9stZWptLvKjzjhvZyP");
 
 
         // Checksum should fail.
