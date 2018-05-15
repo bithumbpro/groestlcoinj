@@ -404,4 +404,34 @@ public class TransactionTest {
             };
         }
     }
+    @Test
+    public void testGetHash() {
+        //This is a transaction in block 2086486
+        Sha256Hash txHash = Sha256Hash.wrap(HEX.decode("a406472e0e1d0c3b4166e302b2e40b33347121a14e90ba9c1fca945f27c6b6ae"));
+        //tx raw data is from Groestlcoin Core getrawtransaction a406472e0e1d0c3b4166e302b2e40b33347121a14e90ba9c1fca945f27c6b6ae
+        byte [] txData = HEX.decode("0100000002ae4be5ab943b0bceeea91aa40648be3ce0261b3a34007e103eb8d1c534ac268e010000006a47" +
+                "304402201a296f1c6b8b97fcebe415e926efbebe154df6477796309e7b8a381b1b6c4d54022079c7c192cd" +
+                "d2cf50d1cef3c876f5a1f9d7aea6f7fac65cfb293a18db88ee7d21012102c4abd3750f56c243baa9fa6fdd" +
+                "f840482f2c5cadb7080a1ca693939c2c7e2258feffffff7dd368abfd69fe41372ff32a5d1d0279380891d4" +
+                "fe9f83e76d337660c5691730000000006b483045022100f02efa3ba177d130028f8834b4d8dedac65e3bdd" +
+                "fe276ac2499f81f2f0dbfcf202203c88b9a79cbae14ebd04af8f5809fd1a409d6dec62dcd9d62a23098c07" +
+                "352a6b012103629e4ab5cd8d14fc77299d18bcc6652c7e5fd74ab29c56c9e526c82355d798b9feffffff04" +
+                "1bcad708000000001976a9142c222208ea3d62f67a3d39278d42c6b34416533d88ac64da310c0000000019" +
+                "76a9147a51e9b0fdfd3b13deb38a30ef7bc0ed9cf651da88ac40757708000000001976a9142471a6bdeefc" +
+                "61c1158cd7ef7a5a8c2e190bc6a488ac13490f00000000001976a9148c1de48028e5740639b285399ffa4b" +
+                "ff5ad987fb88ac54d61f00");
+
+        Sha256Hash hash = Sha256Hash.wrapReversed(Sha256Hash.hash(txData));
+        Transaction tx = new Transaction(MainNetParams.get(), txData);
+        assertEquals(txHash, tx.getHash());  //compare the block explorer hash to the hash of the transaction object
+        assertEquals(hash, txHash); //compare the block explorer hash to the hash of the transaction data
+
+        try {
+            Sha256Hash hashTwice = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(txData));
+            assertEquals(hashTwice, txHash);
+            fail();
+        } catch (AssertionError x) {
+            //successful
+        }
+    }
 }
