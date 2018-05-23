@@ -259,7 +259,7 @@ public class MemoryFullPrunedBlockStore implements FullPrunedBlockStore {
         this.fullStoreDepth = fullStoreDepth > 0 ? fullStoreDepth : 1;
         // Insert the genesis block.
         try {
-            StoredBlock storedGenesisHeader = new StoredBlock(params.getGenesisBlock().cloneAsHeader(), params.getGenesisBlock().getWork(), 0);
+            StoredBlock storedGenesisHeader = new StoredBlock(params.getGenesisBlock().cloneAsHeader(), params.getGenesisBlock().getWork(), 0, 0);
             // The coinbase in the genesis block is not spendable
             List<Transaction> genesisTransactions = Lists.newLinkedList();
             StoredUndoableBlock storedGenesis = new StoredUndoableBlock(params.getGenesisBlock().getHash(), genesisTransactions);
@@ -419,8 +419,7 @@ public class MemoryFullPrunedBlockStore implements FullPrunedBlockStore {
         List<UTXO> outputsList = transactionOutputMap.values();
         for (UTXO output : outputsList) {
             for (ECKey key : keys) {
-                // TODO switch to pubKeyHash in order to support native segwit addresses
-                Address address = LegacyAddress.fromKey(params, key);
+                Address address = SegwitAddress.fromKey(params, key);
                 if (output.getAddress().equals(address.toString())) {
                     foundOutputs.add(output);
                 }

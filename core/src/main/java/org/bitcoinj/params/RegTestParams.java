@@ -18,6 +18,10 @@
 package org.bitcoinj.params;
 
 import org.bitcoinj.core.Block;
+import org.bitcoinj.core.StoredBlock;
+import org.bitcoinj.core.VerificationException;
+import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
 
 import java.math.BigInteger;
 
@@ -31,12 +35,12 @@ public class RegTestParams extends AbstractBitcoinNetParams {
 
     public RegTestParams() {
         super();
-        packetMagic = 0xfabfb5daL;
+        packetMagic = 0xcad71f4aL;
         addressHeader = 111;
         p2shHeader = 196;
         targetTimespan = TARGET_TIMESPAN;
         dumpedPrivateKeyHeader = 239;
-        segwitAddressHrp = "tb";
+        segwitAddressHrp = "bcart";
         genesisBlock.setTime(1296688602L);
         genesisBlock.setDifficultyTarget(0x1d07fff8L);
         genesisBlock.setNonce(384568319);
@@ -48,15 +52,23 @@ public class RegTestParams extends AbstractBitcoinNetParams {
         bip32HeaderPub = 0x043587CF;
         bip32HeaderPriv = 0x04358394;
 
+        BCAHeight = 1500;
+        BCAInitLim = 100;
+        newDifficultyAdjustmentAlgoHeight = 2000;
+
         // Difficulty adjustments are disabled for regtest.
         // By setting the block interval for difficulty adjustments to Integer.MAX_VALUE we make sure difficulty never
         // changes.
         interval = Integer.MAX_VALUE;
         maxTarget = MAX_TARGET;
+        maxTargetStart = MAX_TARGET;
+        initialHashTargetPoS = MAX_TARGET;
+
         subsidyDecreaseBlockCount = 150;
         port = 18444;
         id = ID_REGTEST;
-
+        addressHeader = 111;
+        p2shHeader = 196;
         majorityEnforceBlockUpgrade = MainNetParams.MAINNET_MAJORITY_ENFORCE_BLOCK_UPGRADE;
         majorityRejectBlockOutdated = MainNetParams.MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED;
         majorityWindow = MainNetParams.MAINNET_MAJORITY_WINDOW;
@@ -65,6 +77,14 @@ public class RegTestParams extends AbstractBitcoinNetParams {
     @Override
     public boolean allowEmptyPeerChain() {
         return true;
+    }
+
+    @Override
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+                                           final BlockStore blockStore) throws VerificationException, BlockStoreException {
+
+        if (storedPrev.getHeight() - storedPrev.getPoWHeight() > POW_AVERAGING_WINDOW)
+            super.checkDifficultyTransitions(storedPrev, nextBlock, blockStore);
     }
 
     private static Block genesis;

@@ -24,7 +24,6 @@ import org.bitcoinj.core.listeners.*;
 import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.net.discovery.*;
-import org.bitcoinj.protocols.channels.*;
 import org.bitcoinj.store.*;
 import org.bitcoinj.wallet.*;
 import org.slf4j.*;
@@ -289,7 +288,7 @@ public class WalletAppKit extends AbstractIdleService {
             // Initiate Bitcoin network objects (block store, blockchain and peer group)
             vStore = provideBlockStore(chainFile);
             if (!chainFileExists || restoreFromSeed != null || restoreFromKey != null) {
-                if (checkpoints == null && !Utils.isAndroidRuntime()) {
+                if (checkpoints == null) {
                     checkpoints = CheckpointManager.openStream(params);
                 }
 
@@ -353,7 +352,6 @@ public class WalletAppKit extends AbstractIdleService {
                 vPeerGroup.start();
                 // Make sure we shut down cleanly.
                 installShutdownHook();
-                completeExtensionInitiations(vPeerGroup);
 
                 // TODO: Be able to use the provided download listener when doing a blocking startup.
                 final DownloadProgressTracker listener = new DownloadProgressTracker();
@@ -363,7 +361,6 @@ public class WalletAppKit extends AbstractIdleService {
                 Futures.addCallback(vPeerGroup.startAsync(), new FutureCallback() {
                     @Override
                     public void onSuccess(@Nullable Object result) {
-                        completeExtensionInitiations(vPeerGroup);
                         final DownloadProgressTracker l = downloadListener == null ? new DownloadProgressTracker() : downloadListener;
                         vPeerGroup.startBlockChainDownload(l);
                     }
@@ -464,24 +461,6 @@ public class WalletAppKit extends AbstractIdleService {
             throw new RuntimeException("Failed to rename wallet for restore");
         }
     }
-
-    /*
-     * As soon as the transaction broadcaster han been created we will pass it to the
-     * payment channel extensions
-     */
-    private void completeExtensionInitiations(TransactionBroadcaster transactionBroadcaster) {
-        StoredPaymentChannelClientStates clientStoredChannels = (StoredPaymentChannelClientStates)
-                vWallet.getExtensions().get(StoredPaymentChannelClientStates.class.getName());
-        if(clientStoredChannels != null) {
-            clientStoredChannels.setTransactionBroadcaster(transactionBroadcaster);
-        }
-        StoredPaymentChannelServerStates serverStoredChannels = (StoredPaymentChannelServerStates)
-                vWallet.getExtensions().get(StoredPaymentChannelServerStates.class.getName());
-        if(serverStoredChannels != null) {
-            serverStoredChannels.setTransactionBroadcaster(transactionBroadcaster);
-        }
-    }
-
 
     protected PeerGroup createPeerGroup() throws TimeoutException {
         return new PeerGroup(params, vChain);

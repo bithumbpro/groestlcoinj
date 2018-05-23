@@ -63,7 +63,7 @@ public class BuildCheckpoints {
 
         OptionParser parser = new OptionParser();
         parser.accepts("help");
-        OptionSpec<NetworkEnum> netFlag = parser.accepts("net").withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.MAIN);
+        OptionSpec<NetworkEnum> netFlag = parser.accepts("net").withRequiredArg().ofType(NetworkEnum.class).defaultsTo(NetworkEnum.TEST);
         parser.accepts("peer").withRequiredArg();
         OptionSpec<Integer> daysFlag = parser.accepts("days").withRequiredArg().ofType(Integer.class).defaultsTo(30);
         OptionSet options = parser.parse(args);
@@ -120,8 +120,7 @@ public class BuildCheckpoints {
             peerGroup.addPeerDiscovery(new DnsDiscovery(params));
             peerGroup.start();
 
-            // Connect to at least 4 peers because some may not support download
-            Future<List<Peer>> future = peerGroup.waitForPeers(4);
+            Future<List<Peer>> future = peerGroup.waitForPeers(1);
             System.out.println("Connecting to " + params.getId() + ", timeout 20 seconds...");
             // throw timeout exception if we can't get peers
             future.get(20, SECONDS);
@@ -138,13 +137,15 @@ public class BuildCheckpoints {
         peerGroup.setFastCatchupTimeSecs(now);
 
         final long timeAgo = now - (86400 * options.valueOf(daysFlag));
-        System.out.println("Checkpointing up to " + Utils.dateTimeFormat(timeAgo * 1000));
+        final long eachBlockFrom = timeAgo - (86400 * 20);
 
         chain.addNewBestBlockListener(Threading.SAME_THREAD, new NewBestBlockListener() {
             @Override
             public void notifyNewBestBlock(StoredBlock block) throws VerificationException {
                 int height = block.getHeight();
-                if (height % params.getInterval() == 0 && block.getHeader().getTimeSeconds() <= timeAgo) {
+                long time = block.getHeader().getTimeSeconds();
+
+                if ((time > eachBlockFrom && time <= timeAgo) || (height % params.getInterval() == 0 && time <= timeAgo)) {
                     System.out.println(String.format("Checkpointing block %s at height %d, time %s",
                             block.getHeader().getHash(), block.getHeight(), Utils.dateTimeFormat(block.getHeader().getTime())));
                     checkpoints.put(height, block);

@@ -141,10 +141,14 @@ public class TransactionOutPoint extends ChildMessage {
         TransactionOutput connectedOutput = getConnectedOutput();
         checkNotNull(connectedOutput, "Input is not connected so cannot retrieve key");
         Script connectedScript = connectedOutput.getScriptPubKey();
-        if (ScriptPattern.isPayToPubKeyHash(connectedScript)) {
+
+        if (ScriptPattern.isPayToWitnessPubKeyHash(connectedScript)) {
+            byte[] addressBytes = ScriptPattern.extractHashFromPayToWitnessHash(connectedScript);
+            return keyBag.findKeyFromPubHash(addressBytes);
+        } else if (ScriptPattern.isPayToPubKeyHash(connectedScript)) { // done
             byte[] addressBytes = ScriptPattern.extractHashFromPayToPubKeyHash(connectedScript);
             return keyBag.findKeyFromPubHash(addressBytes);
-        } else if (ScriptPattern.isPayToPubKey(connectedScript)) {
+        } else if (ScriptPattern.isPayToPubKey(connectedScript)) { // done
             byte[] pubkeyBytes = ScriptPattern.extractKeyFromPayToPubKey(connectedScript);
             return keyBag.findKeyFromPubKey(pubkeyBytes);
         } else {
@@ -164,10 +168,14 @@ public class TransactionOutPoint extends ChildMessage {
         TransactionOutput connectedOutput = getConnectedOutput();
         checkNotNull(connectedOutput, "Input is not connected so cannot retrieve key");
         Script connectedScript = connectedOutput.getScriptPubKey();
-        if (ScriptPattern.isPayToPubKeyHash(connectedScript)) {
+
+        if (ScriptPattern.isPayToWitnessPubKeyHash(connectedScript)) {
+            byte[] addressBytes = ScriptPattern.extractHashFromPayToWitnessHash(connectedScript);
+            return RedeemData.of(keyBag.findKeyFromPubHash(addressBytes), connectedScript);
+        } else if (ScriptPattern.isPayToPubKeyHash(connectedScript)) { // done
             byte[] addressBytes = ScriptPattern.extractHashFromPayToPubKeyHash(connectedScript);
             return RedeemData.of(keyBag.findKeyFromPubHash(addressBytes), connectedScript);
-        } else if (ScriptPattern.isPayToPubKey(connectedScript)) {
+        } else if (ScriptPattern.isPayToPubKey(connectedScript)) { // done
             byte[] pubkeyBytes = ScriptPattern.extractKeyFromPayToPubKey(connectedScript);
             return RedeemData.of(keyBag.findKeyFromPubKey(pubkeyBytes), connectedScript);
         } else if (ScriptPattern.isPayToScriptHash(connectedScript)) {

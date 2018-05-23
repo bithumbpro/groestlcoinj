@@ -20,12 +20,7 @@ package org.bitcoinj.wallet;
 import com.google.common.collect.*;
 import com.google.protobuf.*;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.BloomFilter;
-import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.LegacyAddress;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.*;
 import org.bitcoinj.script.*;
 import org.bitcoinj.script.Script.ScriptType;
@@ -127,13 +122,6 @@ public class KeyChainGroup implements KeyBag {
                 : currentKeys;
         this.currentAddresses = new EnumMap<>(KeyChain.KeyPurpose.class);
         maybeLookaheadScripts();
-
-        if (isMarried()) {
-            for (Map.Entry<KeyChain.KeyPurpose, DeterministicKey> entry : this.currentKeys.entrySet()) {
-                Address address = makeP2SHOutputScript(entry.getValue(), getActiveKeyChain()).getToAddress(params);
-                currentAddresses.put(entry.getKey(), address);
-            }
-        }
     }
 
     // This keeps married redeem data in sync with the number of keys issued
@@ -178,10 +166,6 @@ public class KeyChainGroup implements KeyBag {
      */
     public DeterministicKey currentKey(KeyChain.KeyPurpose purpose) {
         DeterministicKeyChain chain = getActiveKeyChain();
-        if (chain.isMarried()) {
-            throw new UnsupportedOperationException("Key is not suitable to receive coins for married keychains." +
-                                                    " Use freshAddress to get P2SH address instead");
-        }
         DeterministicKey current = currentKeys.get(purpose);
         if (current == null) {
             current = freshKey(purpose);
@@ -194,17 +178,7 @@ public class KeyChainGroup implements KeyBag {
      * Returns address for a {@link #currentKey(KeyChain.KeyPurpose)}
      */
     public Address currentAddress(KeyChain.KeyPurpose purpose) {
-        DeterministicKeyChain chain = getActiveKeyChain();
-        if (chain.isMarried()) {
-            Address current = currentAddresses.get(purpose);
-            if (current == null) {
-                current = freshAddress(purpose);
-                currentAddresses.put(purpose, current);
-            }
-            return current;
-        } else {
-            return LegacyAddress.fromKey(params, currentKey(purpose));
-        }
+        return SegwitAddress.fromKey(params, currentKey(purpose));
     }
 
     /**
@@ -237,10 +211,6 @@ public class KeyChainGroup implements KeyBag {
      */
     public List<DeterministicKey> freshKeys(KeyChain.KeyPurpose purpose, int numberOfKeys) {
         DeterministicKeyChain chain = getActiveKeyChain();
-        if (chain.isMarried()) {
-            throw new UnsupportedOperationException("Key is not suitable to receive coins for married keychains." +
-                    " Use freshAddress to get P2SH address instead");
-        }
         return chain.getKeys(purpose, numberOfKeys);   // Always returns the next key along the key chain.
     }
 
@@ -248,18 +218,7 @@ public class KeyChainGroup implements KeyBag {
      * Returns address for a {@link #freshKey(KeyChain.KeyPurpose)}
      */
     public Address freshAddress(KeyChain.KeyPurpose purpose) {
-        DeterministicKeyChain chain = getActiveKeyChain();
-        if (chain.isMarried()) {
-            Script outputScript = chain.freshOutputScript(purpose);
-            checkState(ScriptPattern.isPayToScriptHash(outputScript)); // Only handle P2SH for now
-            Address freshAddress = LegacyAddress.fromScriptHash(params,
-                    ScriptPattern.extractHashFromPayToScriptHash(outputScript));
-            maybeLookaheadScripts();
-            currentAddresses.put(purpose, freshAddress);
-            return freshAddress;
-        } else {
-            return LegacyAddress.fromKey(params, freshKey(purpose));
-        }
+        return SegwitAddress.fromKey(params, freshKey(purpose));
     }
 
     /** Returns the key chain that's used for generation of fresh/current keys. This is always the newest HD chain. */
@@ -494,15 +453,6 @@ public class KeyChainGroup implements KeyBag {
     }
 
     /**
-     * Whether the active keychain is married.  A keychain is married when it vends P2SH addresses
-     * from multiple keychains in a multisig relationship.
-     * @see org.bitcoinj.wallet.MarriedKeyChain
-     */
-    public final boolean isMarried() {
-        return !chains.isEmpty() && getActiveKeyChain().isMarried();
-    }
-
-    /**
      * Encrypt the keys in the group using the KeyCrypter and the AES key. A good default KeyCrypter to use is
      * {@link KeyCrypterScrypt}.
      *
@@ -691,81 +641,6 @@ public class KeyChainGroup implements KeyBag {
         return new KeyChainGroup(params, basicKeyChain, chains, currentKeys, crypter);
     }
 
-    /**
-     * If the key chain contains only random keys and no deterministic key chains, this method will create a chain
-     * based on the oldest non-rotating private key (i.e. the seed is derived from the old wallet).
-     *
-     * @param keyRotationTimeSecs If non-zero, UNIX time for which keys created before this are assumed to be
-     *                            compromised or weak, those keys will not be used for deterministic upgrade.
-     * @param aesKey If non-null, the encryption key the keychain is encrypted under. If the keychain is encrypted
-     *               and this is not supplied, an exception is thrown letting you know you should ask the user for
-     *               their password, turn it into a key, and then try again.
-     * @throws java.lang.IllegalStateException if there is already a deterministic key chain present or if there are
-     *                                         no random keys (i.e. this is not an upgrade scenario), or if aesKey is
-     *                                         provided but the wallet is not encrypted.
-     * @throws java.lang.IllegalArgumentException if the rotation time specified excludes all keys.
-     * @throws DeterministicUpgradeRequiresPassword if the key chain group is encrypted
-     *         and you should provide the users encryption key.
-     * @return the DeterministicKeyChain that was created by the upgrade.
-     */
-    public DeterministicKeyChain upgradeToDeterministic(long keyRotationTimeSecs, @Nullable KeyParameter aesKey) throws DeterministicUpgradeRequiresPassword, AllRandomKeysRotating {
-        checkState(basic.numKeys() > 0);
-        checkArgument(keyRotationTimeSecs >= 0);
-        // Subtract one because the key rotation time might have been set to the creation time of the first known good
-        // key, in which case, that's the one we want to find.
-        ECKey keyToUse = basic.findOldestKeyAfter(keyRotationTimeSecs - 1);
-        if (keyToUse == null)
-            throw new AllRandomKeysRotating();
-
-        if (keyToUse.isEncrypted()) {
-            if (aesKey == null) {
-                // We can't auto upgrade because we don't know the users password at this point. We throw an
-                // exception so the calling code knows to abort the load and ask the user for their password, they can
-                // then try loading the wallet again passing in the AES key.
-                //
-                // There are a few different approaches we could have used here, but they all suck. The most obvious
-                // is to try and be as lazy as possible, running in the old random-wallet mode until the user enters
-                // their password for some other reason and doing the upgrade then. But this could result in strange
-                // and unexpected UI flows for the user, as well as complicating the job of wallet developers who then
-                // have to support both "old" and "new" UI modes simultaneously, switching them on the fly. Given that
-                // this is a one-off transition, it seems more reasonable to just ask the user for their password
-                // on startup, and then the wallet app can have all the widgets for accessing seed words etc active
-                // all the time.
-                throw new DeterministicUpgradeRequiresPassword();
-            }
-            keyToUse = keyToUse.decrypt(aesKey);
-        } else if (aesKey != null) {
-            throw new IllegalStateException("AES Key was provided but wallet is not encrypted.");
-        }
-
-        if (chains.isEmpty()) {
-            log.info("Auto-upgrading pre-HD wallet to HD!");
-        } else {
-            log.info("Wallet with existing HD chain is being re-upgraded due to change in key rotation time.");
-        }
-        log.info("Instantiating new HD chain using oldest non-rotating private key (address: {})", LegacyAddress.fromKey(params, keyToUse));
-        byte[] entropy = checkNotNull(keyToUse.getSecretBytes());
-        // Private keys should be at least 128 bits long.
-        checkState(entropy.length >= DeterministicSeed.DEFAULT_SEED_ENTROPY_BITS / 8);
-        // We reduce the entropy here to 128 bits because people like to write their seeds down on paper, and 128
-        // bits should be sufficient forever unless the laws of the universe change or ECC is broken; in either case
-        // we all have bigger problems.
-        entropy = Arrays.copyOfRange(entropy, 0, DeterministicSeed.DEFAULT_SEED_ENTROPY_BITS / 8);    // final argument is exclusive range.
-        checkState(entropy.length == DeterministicSeed.DEFAULT_SEED_ENTROPY_BITS / 8);
-        String passphrase = ""; // FIXME allow non-empty passphrase
-        DeterministicKeyChain chain = new DeterministicKeyChain(entropy, passphrase, keyToUse.getCreationTimeSeconds());
-        if (aesKey != null) {
-            chain = chain.toEncrypted(checkNotNull(basic.getKeyCrypter()), aesKey);
-        }
-        chains.add(chain);
-        return chain;
-    }
-
-    /** Returns true if the group contains random keys but no HD chains. */
-    public boolean isDeterministicUpgradeRequired() {
-        return basic.numKeys() > 0 && chains.isEmpty();
-    }
-
     private static EnumMap<KeyChain.KeyPurpose, DeterministicKey> createCurrentKeysMap(List<DeterministicKeyChain> chains) {
         DeterministicKeyChain activeChain = chains.get(chains.size() - 1);
 
@@ -794,17 +669,10 @@ public class KeyChainGroup implements KeyBag {
 
     private static void extractFollowingKeychains(List<DeterministicKeyChain> chains) {
         // look for following key chains and map them to the watch keys of followed keychains
-        List<DeterministicKeyChain> followingChains = Lists.newArrayList();
         for (Iterator<DeterministicKeyChain> it = chains.iterator(); it.hasNext(); ) {
             DeterministicKeyChain chain = it.next();
             if (chain.isFollowing()) {
-                followingChains.add(chain);
                 it.remove();
-            } else if (!followingChains.isEmpty()) {
-                if (!(chain instanceof MarriedKeyChain))
-                    throw new IllegalStateException();
-                ((MarriedKeyChain)chain).setFollowingKeyChains(followingChains);
-                followingChains = Lists.newArrayList();
             }
         }
     }

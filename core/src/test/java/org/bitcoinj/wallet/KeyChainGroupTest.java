@@ -62,25 +62,6 @@ public class KeyChainGroupTest {
         watchingAccountKey = DeterministicKey.deserializeB58(null, XPUB, MAINNET);
     }
 
-    private KeyChainGroup createMarriedKeyChainGroup() {
-        KeyChainGroup group = new KeyChainGroup(MAINNET);
-        DeterministicKeyChain chain = createMarriedKeyChain();
-        group.addAndActivateHDChain(chain);
-        group.setLookaheadSize(LOOKAHEAD_SIZE);
-        group.getActiveKeyChain();
-        return group;
-    }
-
-    private MarriedKeyChain createMarriedKeyChain() {
-        byte[] entropy = Sha256Hash.hash("don't use a seed like this in real life".getBytes());
-        DeterministicSeed seed = new DeterministicSeed(entropy, "", MnemonicCode.BIP39_STANDARDISATION_TIME_SECS);
-        MarriedKeyChain chain = MarriedKeyChain.builder()
-                .seed(seed)
-                .followingKeys(watchingAccountKey)
-                .threshold(2).build();
-        return chain;
-    }
-
     @Test
     public void freshCurrentKeys() throws Exception {
         int numKeys = ((group.getLookaheadSize() + group.getLookaheadThreshold()) * 2)   // * 2 because of internal/external
@@ -115,23 +96,6 @@ public class KeyChainGroupTest {
         group.markPubKeyAsUsed(r4.getPubKey());
         ECKey r5 = group.currentKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
         assertNotEquals(r4, r5);
-    }
-
-    @Test
-    public void freshCurrentKeysForMarriedKeychain() throws Exception {
-        group = createMarriedKeyChainGroup();
-
-        try {
-            group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-            fail();
-        } catch (UnsupportedOperationException e) {
-        }
-
-        try {
-            group.currentKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-            fail();
-        } catch (UnsupportedOperationException e) {
-        }
     }
 
     @Test
@@ -172,145 +136,8 @@ public class KeyChainGroupTest {
         assertNull(group.findKeyFromPubHash(d.getPubKeyHash()));
     }
 
-    @Test
-    public void currentP2SHAddress() throws Exception {
-        group = createMarriedKeyChainGroup();
-        Address a1 = group.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(ScriptType.P2SH, a1.getOutputScriptType());
-        Address a2 = group.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(a1, a2);
-        Address a3 = group.currentAddress(KeyChain.KeyPurpose.CHANGE);
-        assertNotEquals(a2, a3);
-    }
-
-    @Test
-    public void freshAddress() throws Exception {
-        group = createMarriedKeyChainGroup();
-        Address a1 = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        Address a2 = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(ScriptType.P2SH, a1.getOutputScriptType());
-        assertNotEquals(a1, a2);
-        group.getBloomFilterElementCount();
-        assertEquals(((group.getLookaheadSize() + group.getLookaheadThreshold()) * 2)   // * 2 because of internal/external
-                + (2 - group.getLookaheadThreshold())  // keys issued
-                + group.getActiveKeyChain().getAccountPath().size() + 3  /* master, account, int, ext */, group.numKeys());
-
-        Address a3 = group.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(a2, a3);
-    }
-
-    @Test
-    public void findRedeemData() throws Exception {
-        group = createMarriedKeyChainGroup();
-
-        // test script hash that we don't have
-        assertNull(group.findRedeemDataFromScriptHash(new ECKey().getPubKey()));
-
-        // test our script hash
-        Address address = group.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        RedeemData redeemData = group.findRedeemDataFromScriptHash(address.getHash());
-        assertNotNull(redeemData);
-        assertNotNull(redeemData.redeemScript);
-        assertEquals(2, redeemData.keys.size());
-    }
 
     // Check encryption with and without a basic keychain.
-
-    @Test
-    public void encryptionWithoutImported() throws Exception {
-        encryption(false);
-    }
-
-    @Test
-    public void encryptionWithImported() throws Exception {
-        encryption(true);
-    }
-
-    public void encryption(boolean withImported) throws Exception {
-        Utils.rollMockClock(0);
-        long now = Utils.currentTimeSeconds();
-        ECKey a = group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(now, group.getEarliestKeyCreationTime());
-        Utils.rollMockClock(-86400);
-        long yesterday = Utils.currentTimeSeconds();
-        ECKey b = new ECKey();
-
-        assertFalse(group.isEncrypted());
-        try {
-            group.checkPassword("foo");   // Cannot check password of an unencrypted group.
-            fail();
-        } catch (IllegalStateException e) {
-        }
-        if (withImported) {
-            assertEquals(now, group.getEarliestKeyCreationTime());
-            group.importKeys(b);
-            assertEquals(yesterday, group.getEarliestKeyCreationTime());
-        }
-        KeyCrypterScrypt scrypt = new KeyCrypterScrypt(2);
-        final KeyParameter aesKey = scrypt.deriveKey("password");
-        group.encrypt(scrypt, aesKey);
-        assertTrue(group.isEncrypted());
-        assertTrue(group.checkPassword("password"));
-        assertFalse(group.checkPassword("wrong password"));
-        final ECKey ea = group.findKeyFromPubKey(a.getPubKey());
-        assertTrue(checkNotNull(ea).isEncrypted());
-        if (withImported) {
-            assertTrue(checkNotNull(group.findKeyFromPubKey(b.getPubKey())).isEncrypted());
-            assertEquals(yesterday, group.getEarliestKeyCreationTime());
-        } else {
-            assertEquals(now, group.getEarliestKeyCreationTime());
-        }
-        try {
-            ea.sign(Sha256Hash.ZERO_HASH);
-            fail();
-        } catch (ECKey.KeyIsEncryptedException e) {
-            // Ignored.
-        }
-        if (withImported) {
-            ECKey c = new ECKey();
-            try {
-                group.importKeys(c);
-                fail();
-            } catch (KeyCrypterException e) {
-            }
-            group.importKeysAndEncrypt(ImmutableList.of(c), aesKey);
-            ECKey ec = group.findKeyFromPubKey(c.getPubKey());
-            try {
-                group.importKeysAndEncrypt(ImmutableList.of(ec), aesKey);
-                fail();
-            } catch (IllegalArgumentException e) {
-            }
-        }
-
-        try {
-            group.decrypt(scrypt.deriveKey("WRONG PASSWORD"));
-            fail();
-        } catch (KeyCrypterException e) {
-        }
-
-        group.decrypt(aesKey);
-        assertFalse(group.isEncrypted());
-        assertFalse(checkNotNull(group.findKeyFromPubKey(a.getPubKey())).isEncrypted());
-        if (withImported) {
-            assertFalse(checkNotNull(group.findKeyFromPubKey(b.getPubKey())).isEncrypted());
-            assertEquals(yesterday, group.getEarliestKeyCreationTime());
-        } else {
-            assertEquals(now, group.getEarliestKeyCreationTime());
-        }
-    }
-
-    @Test
-    public void encryptionWhilstEmpty() throws Exception {
-        group = new KeyChainGroup(MAINNET);
-        group.setLookaheadSize(5);
-        KeyCrypterScrypt scrypt = new KeyCrypterScrypt(2);
-        final KeyParameter aesKey = scrypt.deriveKey("password");
-        group.encrypt(scrypt, aesKey);
-        assertTrue(group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS).isEncrypted());
-        final ECKey key = group.currentKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        group.decrypt(aesKey);
-        assertFalse(checkNotNull(group.findKeyFromPubKey(key.getPubKey())).isEncrypted());
-    }
 
     @Test
     public void bloom() throws Exception {
@@ -318,7 +145,6 @@ public class KeyChainGroupTest {
         ECKey key2 = new ECKey();
         BloomFilter filter = group.getBloomFilter(group.getBloomFilterElementCount(), 0.001, (long)(Math.random() * Long.MAX_VALUE));
         assertTrue(filter.contains(key1.getPubKeyHash()));
-        assertTrue(filter.contains(key1.getPubKey()));
         assertFalse(filter.contains(key2.getPubKey()));
         // Check that the filter contains the lookahead buffer and threshold zone.
         for (int i = 0; i < LOOKAHEAD_SIZE + group.getLookaheadThreshold(); i++) {
@@ -330,48 +156,6 @@ public class KeyChainGroupTest {
         group.importKeys(key2);
         filter = group.getBloomFilter(group.getBloomFilterElementCount(), 0.001, (long) (Math.random() * Long.MAX_VALUE));
         assertTrue(filter.contains(key1.getPubKeyHash()));
-        assertTrue(filter.contains(key1.getPubKey()));
-        assertTrue(filter.contains(key2.getPubKey()));
-    }
-
-    @Test
-    public void findRedeemScriptFromPubHash() throws Exception {
-        group = createMarriedKeyChainGroup();
-        Address address = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertTrue(group.findRedeemDataFromScriptHash(address.getHash()) != null);
-        group.getBloomFilterElementCount();
-        KeyChainGroup group2 = createMarriedKeyChainGroup();
-        group2.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        group2.getBloomFilterElementCount();  // Force lookahead.
-        // test address from lookahead zone and lookahead threshold zone
-        for (int i = 0; i < group.getLookaheadSize() + group.getLookaheadThreshold(); i++) {
-            address = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-            assertTrue(group2.findRedeemDataFromScriptHash(address.getHash()) != null);
-        }
-        assertFalse(group2.findRedeemDataFromScriptHash(group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS).getHash()) != null);
-    }
-
-    @Test
-    public void bloomFilterForMarriedChains() throws Exception {
-        group = createMarriedKeyChainGroup();
-        int bufferSize = group.getLookaheadSize() + group.getLookaheadThreshold();
-        int expected = bufferSize * 2 /* chains */ * 2 /* elements */;
-        assertEquals(expected, group.getBloomFilterElementCount());
-        Address address1 = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(expected, group.getBloomFilterElementCount());
-        BloomFilter filter = group.getBloomFilter(expected + 2, 0.001, (long)(Math.random() * Long.MAX_VALUE));
-        assertTrue(filter.contains(address1.getHash()));
-
-        Address address2 = group.freshAddress(KeyChain.KeyPurpose.CHANGE);
-        assertTrue(filter.contains(address2.getHash()));
-
-        // Check that the filter contains the lookahead buffer.
-        for (int i = 0; i < bufferSize - 1 /* issued address */; i++) {
-            Address address = group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-            assertTrue("key " + i, filter.contains(address.getHash()));
-        }
-        // We ran ahead of the lookahead buffer.
-        assertFalse(filter.contains(group.freshAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS).getHash()));
     }
 
     @Test
@@ -466,28 +250,6 @@ public class KeyChainGroupTest {
     }
 
     @Test
-    public void serializeMarried() throws Exception {
-        group = createMarriedKeyChainGroup();
-        Address address1 = group.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertTrue(group.isMarried());
-        assertEquals(2, group.getActiveKeyChain().getSigsRequiredToSpend());
-
-        List<Protos.Key> protoKeys = group.serializeToProtobuf();
-        KeyChainGroup group2 = KeyChainGroup.fromProtobufUnencrypted(MAINNET, protoKeys);
-        assertTrue(group2.isMarried());
-        assertEquals(2, group.getActiveKeyChain().getSigsRequiredToSpend());
-        Address address2 = group2.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        assertEquals(address1, address2);
-    }
-
-    @Test
-    public void addFollowingAccounts() throws Exception {
-        assertFalse(group.isMarried());
-        group.addAndActivateHDChain(createMarriedKeyChain());
-        assertTrue(group.isMarried());
-    }
-
-    @Test
     public void constructFromSeed() throws Exception {
         ECKey key1 = group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
         final DeterministicSeed seed = checkNotNull(group.getActiveKeyChain().getSeed());
@@ -495,91 +257,6 @@ public class KeyChainGroupTest {
         group2.setLookaheadSize(5);
         ECKey key2 = group2.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
         assertEquals(key1, key2);
-    }
-
-    @Test(expected = DeterministicUpgradeRequiredException.class)
-    public void deterministicUpgradeRequired() throws Exception {
-        // Check that if we try to use HD features in a KCG that only has random keys, we get an exception.
-        group = new KeyChainGroup(MAINNET);
-        group.importKeys(new ECKey(), new ECKey());
-        assertTrue(group.isDeterministicUpgradeRequired());
-        group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);   // throws
-    }
-
-    @Test
-    public void deterministicUpgradeUnencrypted() throws Exception {
-        // Check that a group that contains only random keys has its HD chain created using the private key bytes of
-        // the oldest random key, so upgrading the same wallet twice gives the same outcome.
-        group = new KeyChainGroup(MAINNET);
-        group.setLookaheadSize(LOOKAHEAD_SIZE);   // Don't want slow tests.
-        ECKey key1 = new ECKey();
-        Utils.rollMockClock(86400);
-        ECKey key2 = new ECKey();
-        group.importKeys(key2, key1);
-
-        List<Protos.Key> protobufs = group.serializeToProtobuf();
-        group.upgradeToDeterministic(0, null);
-        assertFalse(group.isDeterministicUpgradeRequired());
-        DeterministicKey dkey1 = group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        DeterministicSeed seed1 = group.getActiveKeyChain().getSeed();
-        assertNotNull(seed1);
-
-        group = KeyChainGroup.fromProtobufUnencrypted(MAINNET, protobufs);
-        group.upgradeToDeterministic(0, null);  // Should give same result as last time.
-        DeterministicKey dkey2 = group.freshKey(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-        DeterministicSeed seed2 = group.getActiveKeyChain().getSeed();
-        assertEquals(seed1, seed2);
-        assertEquals(dkey1, dkey2);
-
-        // Check we used the right (oldest) key despite backwards import order.
-        byte[] truncatedBytes = Arrays.copyOfRange(key1.getSecretBytes(), 0, 16);
-        assertArrayEquals(seed1.getEntropyBytes(), truncatedBytes);
-    }
-
-    @Test
-    public void deterministicUpgradeRotating() throws Exception {
-        group = new KeyChainGroup(MAINNET);
-        group.setLookaheadSize(LOOKAHEAD_SIZE);   // Don't want slow tests.
-        long now = Utils.currentTimeSeconds();
-        ECKey key1 = new ECKey();
-        Utils.rollMockClock(86400);
-        ECKey key2 = new ECKey();
-        Utils.rollMockClock(86400);
-        ECKey key3 = new ECKey();
-        group.importKeys(key2, key1, key3);
-        group.upgradeToDeterministic(now + 10, null);
-        DeterministicSeed seed = group.getActiveKeyChain().getSeed();
-        assertNotNull(seed);
-        // Check we used the right key: oldest non rotating.
-        byte[] truncatedBytes = Arrays.copyOfRange(key2.getSecretBytes(), 0, 16);
-        assertArrayEquals(seed.getEntropyBytes(), truncatedBytes);
-    }
-
-    @Test
-    public void deterministicUpgradeEncrypted() throws Exception {
-        group = new KeyChainGroup(MAINNET);
-        final ECKey key = new ECKey();
-        group.importKeys(key);
-        final KeyCrypterScrypt crypter = new KeyCrypterScrypt();
-        final KeyParameter aesKey = crypter.deriveKey("abc");
-        assertTrue(group.isDeterministicUpgradeRequired());
-        group.encrypt(crypter, aesKey);
-        assertTrue(group.isDeterministicUpgradeRequired());
-        try {
-            group.upgradeToDeterministic(0, null);
-            fail();
-        } catch (DeterministicUpgradeRequiresPassword e) {
-            // Expected.
-        }
-        group.upgradeToDeterministic(0, aesKey);
-        assertFalse(group.isDeterministicUpgradeRequired());
-        final DeterministicSeed deterministicSeed = group.getActiveKeyChain().getSeed();
-        assertNotNull(deterministicSeed);
-        assertTrue(deterministicSeed.isEncrypted());
-        byte[] entropy = checkNotNull(group.getActiveKeyChain().toDecrypted(aesKey).getSeed()).getEntropyBytes();
-        // Check we used the right key: oldest non rotating.
-        byte[] truncatedBytes = Arrays.copyOfRange(key.getSecretBytes(), 0, 16);
-        assertArrayEquals(entropy, truncatedBytes);
     }
 
     @Test

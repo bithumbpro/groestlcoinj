@@ -199,7 +199,7 @@ public class PeerGroup implements TransactionBroadcaster {
             // filter. In case (1), we need to retransmit the filter to the connected peers. In case (2), we don't
             // and shouldn't, we should just recalculate and cache the new filter for next time.
             for (TransactionOutput output : tx.getOutputs()) {
-                if (ScriptPattern.isPayToPubKey(output.getScriptPubKey()) && output.isMine(wallet)) {
+                if (ScriptPattern.isPayToWitnessPubKeyHash(output.getScriptPubKey()) && output.isMine(wallet)) {
                     if (tx.getConfidence().getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING)
                         recalculateFastCatchupAndFilter(FilterRecalculateMode.SEND_IF_CHANGED);
                     else
@@ -267,7 +267,7 @@ public class PeerGroup implements TransactionBroadcaster {
      * FP rate is chosen for performance rather than privacy. If a future version of bitcoinj fixes the known
      * de-anonymization attacks this FP rate may rise again (or more likely, become expressed as a bandwidth allowance).
      */
-    public static final double DEFAULT_BLOOM_FILTER_FP_RATE = 0.00001;
+    public static final double DEFAULT_BLOOM_FILTER_FP_RATE = 0.000005;
     /** Maximum increase in FP rate before forced refresh of the bloom filter */
     public static final double MAX_FP_RATE_INCREASE = 10.0f;
     // An object that calculates bloom filters given a list of filter providers, whilst tracking some state useful
@@ -547,7 +547,10 @@ public class PeerGroup implements TransactionBroadcaster {
                 for (Wallet w : wallets) {
                     Transaction tx = w.getTransaction(item.hash);
                     if (tx == null) continue;
-                    transactions.add(tx);
+                    if (item.type == InventoryItem.Type.Transaction)
+                        transactions.add(tx.disableWitnessSerialization());
+                    else
+                        transactions.add(tx);
                     it.remove();
                     break;
                 }
@@ -1074,6 +1077,12 @@ public class PeerGroup implements TransactionBroadcaster {
         Futures.getUnchecked(startAsync());
     }
 
+    /** Can just use start() for a blocking start here instead of startAsync/awaitRunning: PeerGroup is no longer a Guava service. */
+    @Deprecated
+    public void awaitRunning() {
+        waitForJobQueue();
+    }
+
     public ListenableFuture stopAsync() {
         checkState(vRunning);
         vRunning = false;
@@ -1082,7 +1091,6 @@ public class PeerGroup implements TransactionBroadcaster {
             public void run() {
                 try {
                     log.info("Stopping ...");
-                    Stopwatch watch = Stopwatch.createStarted();
                     // Blocking close of all sockets.
                     channels.stopAsync();
                     channels.awaitTerminated();
@@ -1090,7 +1098,7 @@ public class PeerGroup implements TransactionBroadcaster {
                         peerDiscovery.shutdown();
                     }
                     vRunning = false;
-                    log.info("Stopped, took {}.", watch);
+                    log.info("Stopped.");
                 } catch (Throwable e) {
                     log.error("Exception when shutting down", e);  // The executor swallows exceptions :(
                 }
@@ -1103,11 +1111,19 @@ public class PeerGroup implements TransactionBroadcaster {
     /** Does a blocking stop */
     public void stop() {
         try {
-            Stopwatch watch = Stopwatch.createStarted();
             stopAsync();
             log.info("Awaiting PeerGroup shutdown ...");
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            log.info("... took {}", watch);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Can just use stop() here instead of stopAsync/awaitTerminated: PeerGroup is no longer a Guava service. */
+    @Deprecated
+    public void awaitTerminated() {
+        try {
+            executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }

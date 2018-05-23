@@ -17,17 +17,17 @@
 package org.bitcoinj.params;
 
 import org.bitcoinj.core.*;
+import org.bitcoinj.script.Script;
+import org.bitcoinj.utils.VersionTally;
 
 import java.math.BigInteger;
+import java.util.EnumSet;
 
 /**
  * Network parameters used by the bitcoinj unit tests (and potentially your own). This lets you solve a block using
  * {@link Block#solve()} by setting difficulty to the easiest possible.
  */
 public class UnitTestParams extends AbstractBitcoinNetParams {
-    public static final int UNITNET_MAJORITY_WINDOW = 8;
-    public static final int TESTNET_MAJORITY_REJECT_BLOCK_OUTDATED = 6;
-    public static final int TESTNET_MAJORITY_ENFORCE_BLOCK_UPGRADE = 4;
 
     public UnitTestParams() {
         super();
@@ -35,13 +35,18 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
         packetMagic = 0x0b110907;
         addressHeader = 111;
         p2shHeader = 196;
-        maxTarget = new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+
+        maxTarget = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+        maxTargetStart = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+        initialHashTargetPoS = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
         genesisBlock.solve();
         port = 18333;
         interval = 10;
         dumpedPrivateKeyHeader = 239;
+        segwitAddressHrp = "tbca";
         targetTimespan = 200000000;  // 6 years. Just a very big number.
         spendableCoinbaseDepth = 5;
         subsidyDecreaseBlockCount = 100;

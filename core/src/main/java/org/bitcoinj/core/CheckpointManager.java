@@ -197,7 +197,7 @@ public class CheckpointManager {
             Map.Entry<Long, StoredBlock> entry = checkpoints.floorEntry(time);
             if (entry != null) return entry.getValue();
             Block genesis = params.getGenesisBlock().cloneAsHeader();
-            return new StoredBlock(genesis, genesis.getWork(), 0);
+            return new StoredBlock(genesis, genesis.getWork(), 0, 0);
         } catch (VerificationException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
@@ -233,8 +233,11 @@ public class CheckpointManager {
 
         BufferedInputStream stream = new BufferedInputStream(checkpoints);
         CheckpointManager manager = new CheckpointManager(params, stream);
-        StoredBlock checkpoint = manager.getCheckpointBefore(time);
-        store.put(checkpoint);
-        store.setChainHead(checkpoint);
+
+        for(Map.Entry<Long, StoredBlock> entry : manager.checkpoints.entrySet()) {
+            StoredBlock checkpoint = entry.getValue();
+            store.put(checkpoint);
+            store.setChainHead(checkpoint);
+        }
     }
 }

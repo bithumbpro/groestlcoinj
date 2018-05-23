@@ -90,7 +90,7 @@ public class TestWithNetworkConnections {
         if (wallet == null) {
             wallet = new Wallet(UNITTEST);
             key = wallet.freshReceiveKey();
-            address = LegacyAddress.fromKey(UNITTEST, key);
+            address = SegwitAddress.fromKey(UNITTEST, key);
         }
         blockChain = new BlockChain(UNITTEST, wallet, blockStore);
 

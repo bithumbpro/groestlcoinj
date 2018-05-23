@@ -52,10 +52,7 @@ import static com.google.common.base.Preconditions.*;
  *
  * <p>There are two subclasses of AbstractBlockChain that are useful: {@link BlockChain}, which is the simplest
  * class and implements <i>simplified payment verification</i>. This is a lightweight and efficient mode that does
- * not verify the contents of blocks, just their headers. A {@link FullPrunedBlockChain} paired with a
- * {@link H2FullPrunedBlockStore} implements full verification, which is equivalent to
- * Bitcoin Core. To learn more about the alternative security models, please consult the articles on the
- * website.</p>
+ * not verify the contents of blocks, just their headers.
  *
  * <b>Theory</b>
  *
@@ -494,6 +491,9 @@ public abstract class AbstractBlockChain {
                 tryConnectingOrphans();
 
             return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
         } finally {
             lock.unlock();
         }

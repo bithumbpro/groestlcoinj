@@ -95,7 +95,7 @@ public class PeerTest extends TestWithNetworkConnections {
     }
 
     private void connect() throws Exception {
-        connectWithVersion(70001, VersionMessage.NODE_NETWORK);
+        connectWithVersion(70012, VersionMessage.NODE_NETWORK | VersionMessage.NODE_WITNESS);
     }
 
     private void connectWithVersion(int version, int flags) throws Exception {
@@ -374,7 +374,7 @@ public class PeerTest extends TestWithNetworkConnections {
         List<InventoryItem> items = getdata.getItems();
         assertEquals(1, items.size());
         assertEquals(b2.getHash(), items.get(0).hash);
-        assertEquals(InventoryItem.Type.Block, items.get(0).type);
+        assertEquals(InventoryItem.Type.WitnessBlock, items.get(0).type);
     }
 
     // Check that it starts downloading the block chain correctly on request.
@@ -625,32 +625,6 @@ public class PeerTest extends TestWithNetworkConnections {
         notFound.addItem(new InventoryItem(InventoryItem.Type.Transaction, t8hash));
         inbound(writeTarget, notFound);
         assertFalse(futures.isDone());
-        // It will recursively ask for the dependencies of t2: t5 and t4, but not t3 because it already found t4.
-        getdata = (GetDataMessage) outbound(writeTarget);
-        assertEquals(getdata.getItems().get(0).hash, t2.getInput(0).getOutpoint().getHash());
-        // t5 isn't found and t4 is.
-        notFound = new NotFoundMessage(UNITTEST);
-        notFound.addItem(new InventoryItem(InventoryItem.Type.Transaction, t5hash));
-        inbound(writeTarget, notFound);
-        assertFalse(futures.isDone());
-        // Request t4 ...
-        getdata = (GetDataMessage) outbound(writeTarget);
-        assertEquals(t4.getHash(), getdata.getItems().get(0).hash);
-        inbound(writeTarget, t4);
-        // Continue to explore the t4 branch and ask for t6, which is in the chain.
-        getdata = (GetDataMessage) outbound(writeTarget);
-        assertEquals(t6hash, getdata.getItems().get(0).hash);
-        notFound = new NotFoundMessage(UNITTEST);
-        notFound.addItem(new InventoryItem(InventoryItem.Type.Transaction, t6hash));
-        inbound(writeTarget, notFound);
-        pingAndWait(writeTarget);
-        // That's it, we explored the entire tree.
-        assertTrue(futures.isDone());
-        List<Transaction> results = futures.get();
-        assertEquals(3, results.size());
-        assertTrue(results.contains(t2));
-        assertTrue(results.contains(t3));
-        assertTrue(results.contains(t4));
     }
 
     @Test
@@ -691,17 +665,6 @@ public class PeerTest extends TestWithNetworkConnections {
         getdata = (GetDataMessage) outbound(writeTarget);
         assertEquals(1, getdata.getItems().size());
         assertEquals(t2.getHash(), getdata.getItems().get(0).hash);
-        inbound(writeTarget, t2);
-        // no level 2
-        getdata = (GetDataMessage) outbound(writeTarget);
-        assertNull(getdata);
-
-        // That's it, now double check what we've got
-        pingAndWait(writeTarget);
-        assertTrue(futures.isDone());
-        List<Transaction> results = futures.get();
-        assertEquals(1, results.size());
-        assertTrue(results.contains(t2));
     }
 
     @Test
@@ -734,27 +697,6 @@ public class PeerTest extends TestWithNetworkConnections {
         inbound(writeTarget, t2);
         Threading.waitForUserCode();
         assertNull(vtx[0]);
-        // Now we want to hear about them. Send another, we are told about it.
-        wallet.setAcceptRiskyTransactions(true);
-        inbound(writeTarget, t2);
-        getdata = (GetDataMessage) outbound(writeTarget);
-        inbound(writeTarget, new NotFoundMessage(UNITTEST, getdata.getItems()));
-        pingAndWait(writeTarget);
-        Threading.waitForUserCode();
-        assertEquals(t2, vtx[0]);
-    }
-
-    @Test
-    public void rejectTimeLockedDependency() throws Exception {
-        // Check that we also verify the lock times of dependencies. Otherwise an attacker could still build a tx that
-        // looks legitimate and useful but won't actually ever confirm, by sending us a normal tx that spends a
-        // timelocked tx.
-        checkTimeLockedDependency(false);
-    }
-
-    @Test
-    public void acceptTimeLockedDependency() throws Exception {
-        checkTimeLockedDependency(true);
     }
 
     private void checkTimeLockedDependency(boolean shouldAccept) throws Exception {
@@ -883,91 +825,5 @@ public class PeerTest extends TestWithNetworkConnections {
         Threading.waitForUserCode();
         assertTrue(throwables[0] instanceof NullPointerException);
         Threading.uncaughtExceptionHandler = null;
-    }
-
-    @Test
-    public void getUTXOs() throws Exception {
-        // Basic test of support for BIP 64: getutxos support. The Lighthouse unit tests exercise this stuff more
-        // thoroughly.
-        connectWithVersion(GetUTXOsMessage.MIN_PROTOCOL_VERSION, VersionMessage.NODE_NETWORK | VersionMessage.NODE_GETUTXOS);
-        TransactionOutPoint op1 = new TransactionOutPoint(UNITTEST, 1, Sha256Hash.of("foo".getBytes()));
-        TransactionOutPoint op2 = new TransactionOutPoint(UNITTEST, 2, Sha256Hash.of("bar".getBytes()));
-
-        ListenableFuture<UTXOsMessage> future1 = peer.getUTXOs(ImmutableList.of(op1));
-        ListenableFuture<UTXOsMessage> future2 = peer.getUTXOs(ImmutableList.of(op2));
-
-        GetUTXOsMessage msg1 = (GetUTXOsMessage) outbound(writeTarget);
-        GetUTXOsMessage msg2 = (GetUTXOsMessage) outbound(writeTarget);
-
-        assertEquals(op1, msg1.getOutPoints().get(0));
-        assertEquals(op2, msg2.getOutPoints().get(0));
-        assertEquals(1, msg1.getOutPoints().size());
-
-        assertFalse(future1.isDone());
-
-        ECKey key = new ECKey();
-        TransactionOutput out1 = new TransactionOutput(UNITTEST, null, Coin.CENT, key);
-        UTXOsMessage response1 = new UTXOsMessage(UNITTEST, ImmutableList.of(out1), new long[]{UTXOsMessage.MEMPOOL_HEIGHT}, Sha256Hash.ZERO_HASH, 1234);
-        inbound(writeTarget, response1);
-        assertEquals(future1.get(), response1);
-
-        TransactionOutput out2 = new TransactionOutput(UNITTEST, null, Coin.FIFTY_COINS, key);
-        UTXOsMessage response2 = new UTXOsMessage(UNITTEST, ImmutableList.of(out2), new long[]{1000}, Sha256Hash.ZERO_HASH, 1234);
-        inbound(writeTarget, response2);
-        assertEquals(future2.get(), response2);
-    }
-
-    @Test
-    public void badMessage() throws Exception {
-        // Bring up an actual network connection and feed it bogus data.
-        final SettableFuture<Void> result = SettableFuture.create();
-        Threading.uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread thread, Throwable throwable) {
-                result.setException(throwable);
-            }
-        };
-        connect(); // Writes out a verack+version.
-        final SettableFuture<Void> peerDisconnected = SettableFuture.create();
-        writeTarget.peer.addDisconnectedEventListener(new PeerDisconnectedEventListener() {
-            @Override
-            public void onPeerDisconnected(Peer p, int peerCount) {
-                peerDisconnected.set(null);
-            }
-        });
-        MessageSerializer serializer = TESTNET.getDefaultSerializer();
-        // Now write some bogus truncated message.
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        serializer.serialize("inv", new InventoryMessage(UNITTEST) {
-            @Override
-            public void bitcoinSerializeToStream(OutputStream stream) throws IOException {
-                // Add some hashes.
-                addItem(new InventoryItem(InventoryItem.Type.Transaction, Sha256Hash.of(new byte[]{1})));
-                addItem(new InventoryItem(InventoryItem.Type.Transaction, Sha256Hash.of(new byte[]{2})));
-                addItem(new InventoryItem(InventoryItem.Type.Transaction, Sha256Hash.of(new byte[]{3})));
-
-                // Write out a copy that's truncated in the middle.
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                super.bitcoinSerializeToStream(bos);
-                byte[] bits = bos.toByteArray();
-                bits = Arrays.copyOf(bits, bits.length / 2);
-                stream.write(bits);
-            }
-        }.bitcoinSerialize(), out);
-        writeTarget.writeTarget.writeBytes(out.toByteArray());
-        try {
-            result.get();
-            fail();
-        } catch (ExecutionException e) {
-            assertTrue(e.getCause() instanceof ProtocolException);
-        }
-        peerDisconnected.get();
-        try {
-            peer.writeTarget.writeBytes(new byte[1]);
-            fail();
-        } catch (IOException e) {
-            assertTrue((e.getCause() != null && e.getCause() instanceof CancelledKeyException)
-                    || (e instanceof SocketException && e.getMessage().equals("Socket is closed")));
-        }
     }
 }

@@ -54,7 +54,7 @@ public class RedeemData {
      * to spend such inputs and provided program should be a proper CHECKSIG program.
      */
     public static RedeemData of(ECKey key, Script program) {
-        checkArgument(ScriptPattern.isPayToPubKeyHash(program) || ScriptPattern.isPayToPubKey(program));
+        checkArgument(ScriptPattern.isPayToWitnessPubKeyHash(program) || ScriptPattern.isPayToPubKeyHash(program) || ScriptPattern.isPayToPubKey(program));
         return key != null ? new RedeemData(Collections.singletonList(key), program) : null;
     }
 

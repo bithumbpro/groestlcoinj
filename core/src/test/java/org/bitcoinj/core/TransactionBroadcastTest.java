@@ -66,7 +66,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
     @Test
     public void fourPeers() throws Exception {
         InboundMessageQueuer[] channels = { connectPeer(1), connectPeer(2), connectPeer(3), connectPeer(4) };
-        Transaction tx = FakeTxBuilder.createFakeTx(UNITTEST);
+        Transaction tx = new Transaction(UNITTEST);
         tx.getConfidence().setSource(TransactionConfidence.Source.SELF);
         TransactionBroadcast broadcast = new TransactionBroadcast(peerGroup, tx);
         final AtomicDouble lastProgress = new AtomicDouble();
@@ -127,7 +127,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
     @Test
     public void rejectHandling() throws Exception {
         InboundMessageQueuer[] channels = { connectPeer(0), connectPeer(1), connectPeer(2), connectPeer(3), connectPeer(4) };
-        Transaction tx = FakeTxBuilder.createFakeTx(UNITTEST);
+        Transaction tx = new Transaction(UNITTEST);
         TransactionBroadcast broadcast = new TransactionBroadcast(peerGroup, tx);
         ListenableFuture<Transaction> future = broadcast.broadcast();
         // 0 and 3 are randomly selected to receive the broadcast.
@@ -149,17 +149,20 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
     public void retryFailedBroadcast() throws Exception {
         // If we create a spend, it's sent to a peer that swallows it, and the peergroup is removed/re-added then
         // the tx should be broadcast again.
-        InboundMessageQueuer p1 = connectPeer(1);
-        connectPeer(2);
+        // Set up connections and block chain.
+        VersionMessage ver = new VersionMessage(UNITTEST, 2);
+        ver.localServices = VersionMessage.NODE_NETWORK;
+        InboundMessageQueuer p1 = connectPeer(1, ver);
+        InboundMessageQueuer p2 = connectPeer(2);
 
         // Send ourselves a bit of money.
         Block b1 = FakeTxBuilder.makeSolvedTestBlock(blockStore, address);
         inbound(p1, b1);
-        assertNull(outbound(p1));
+        pingAndWait(p1);
         assertEquals(FIFTY_COINS, wallet.getBalance());
 
         // Now create a spend, and expect the announcement on p1.
-        Address dest = LegacyAddress.fromKey(UNITTEST, new ECKey());
+        Address dest = SegwitAddress.fromKey(UNITTEST, new ECKey());
         Wallet.SendResult sendResult = wallet.sendCoins(peerGroup, dest, COIN);
         assertFalse(sendResult.broadcastComplete.isDone());
         Transaction t1;
@@ -195,7 +198,6 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         Block b1 = FakeTxBuilder.makeSolvedTestBlock(blockStore, address);
         inbound(p1, b1);
         pingAndWait(p1);
-        assertNull(outbound(p1));
         assertEquals(FIFTY_COINS, wallet.getBalance());
 
         // Check that the wallet informs us of changes in confidence as the transaction ripples across the network.
@@ -208,7 +210,7 @@ public class TransactionBroadcastTest extends TestWithPeerGroup {
         });
 
         // Now create a spend, and expect the announcement on p1.
-        Address dest = LegacyAddress.fromKey(UNITTEST, new ECKey());
+        Address dest = SegwitAddress.fromKey(UNITTEST, new ECKey());
         Wallet.SendResult sendResult = wallet.sendCoins(peerGroup, dest, COIN);
         assertNotNull(sendResult.tx);
         Threading.waitForUserCode();

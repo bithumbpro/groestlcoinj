@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.*;
+import static org.bitcoinj.core.Transaction.MIN_NONDUST_OUTPUT;
 
 /**
  * <p>A TransactionOutput message contains a scriptPubKey that controls who is able to spend its value. It is a sub-part
@@ -119,23 +120,6 @@ public class TransactionOutput extends ChildMessage {
         return scriptPubKey;
     }
 
-    @Nullable
-    @Deprecated
-    public LegacyAddress getAddressFromP2PKHScript(NetworkParameters params) throws ScriptException {
-        if (ScriptPattern.isPayToPubKeyHash(getScriptPubKey()))
-            return LegacyAddress.fromPubKeyHash(params,
-                    ScriptPattern.extractHashFromPayToPubKeyHash(getScriptPubKey()));
-        return null;
-    }
-
-    @Nullable
-    @Deprecated
-    public LegacyAddress getAddressFromP2SH(NetworkParameters params) throws ScriptException {
-        if (ScriptPattern.isPayToScriptHash(getScriptPubKey()))
-            return LegacyAddress.fromScriptHash(params, ScriptPattern.extractHashFromPayToScriptHash(getScriptPubKey()));
-        return null;
-    }
-
     @Override
     protected void parse() throws ProtocolException {
         value = readInt64();
@@ -194,38 +178,7 @@ public class TransactionOutput extends ChildMessage {
         // Transactions that are OP_RETURN can't be dust regardless of their value.
         if (ScriptPattern.isOpReturn(getScriptPubKey()))
             return false;
-        return getValue().isLessThan(getMinNonDustValue());
-    }
-
-    /**
-     * <p>Gets the minimum value for a txout of this size to be considered non-dust by Bitcoin Core
-     * (and thus relayed). See: CTxOut::IsDust() in Bitcoin Core. The assumption is that any output that would
-     * consume more than a third of its value in fees is not something the Bitcoin system wants to deal with right now,
-     * so we call them "dust outputs" and they're made non standard. The choice of one third is somewhat arbitrary and
-     * may change in future.</p>
-     *
-     * <p>You probably should use {@link TransactionOutput#getMinNonDustValue()} which uses
-     * a safe fee-per-kb by default.</p>
-     *
-     * @param feePerKb The fee required per kilobyte. Note that this is the same as Bitcoin Core's -minrelaytxfee * 3
-     */
-    public Coin getMinNonDustValue(Coin feePerKb) {
-        // A typical output is 33 bytes (pubkey hash + opcodes) and requires an input of 148 bytes to spend so we add
-        // that together to find out the total amount of data used to transfer this amount of value. Note that this
-        // formula is wrong for anything that's not a P2PKH output, unfortunately, we must follow Bitcoin Core's
-        // wrongness in order to ensure we're considered standard. A better formula would either estimate the
-        // size of data needed to satisfy all different script types, or just hard code 33 below.
-        final long size = this.unsafeBitcoinSerialize().length + 148;
-        return feePerKb.multiply(size).divide(1000);
-    }
-
-    /**
-     * Returns the minimum value for this output to be considered "not dust", i.e. the transaction will be relayable
-     * and mined by default miners. For normal pay to address outputs, this is 2730 satoshis, the same as
-     * {@link Transaction#MIN_NONDUST_OUTPUT}.
-     */
-    public Coin getMinNonDustValue() {
-        return getMinNonDustValue(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.multiply(3));
+        return getValue().isLessThan(MIN_NONDUST_OUTPUT);
     }
 
     /**
@@ -301,7 +254,7 @@ public class TransactionOutput extends ChildMessage {
     public boolean isMine(TransactionBag transactionBag) {
         try {
             Script script = getScriptPubKey();
-            if (ScriptPattern.isPayToPubKey(script)) {
+            if (ScriptPattern.isPayToPubKey(script)) { // done
                 return transactionBag.isPubKeyMine(ScriptPattern.extractKeyFromPayToPubKey(script));
             } if (ScriptPattern.isPayToScriptHash(script)) {
                 return transactionBag.isPayToScriptHashMine(ScriptPattern.extractHashFromPayToScriptHash(script));
@@ -325,9 +278,11 @@ public class TransactionOutput extends ChildMessage {
             Script script = getScriptPubKey();
             StringBuilder buf = new StringBuilder("TxOut of ");
             buf.append(Coin.valueOf(value).toFriendlyString());
-            if (ScriptPattern.isPayToPubKeyHash(script) || ScriptPattern.isPayToScriptHash(script))
+            if (ScriptPattern.isPayToWitnessPubKeyHash(script))
                 buf.append(" to ").append(script.getToAddress(params));
-            else if (ScriptPattern.isPayToPubKey(script))
+            else if (ScriptPattern.isPayToPubKeyHash(script) || ScriptPattern.isPayToScriptHash(script)) // done
+                buf.append(" to ").append(script.getToAddress(params));
+            else if (ScriptPattern.isPayToPubKey(script)) // done
                 buf.append(" to pubkey ").append(Utils.HEX.encode(ScriptPattern.extractKeyFromPayToPubKey(script)));
             else if (ScriptPattern.isSentToMultisig(script))
                 buf.append(" to multisig");
@@ -379,6 +334,10 @@ public class TransactionOutput extends ChildMessage {
             }
         }
         return -1;
+    }
+
+    public int countSigOps() {
+        return Script.getSigOpCount(getScriptBytes()) * Transaction.WITNESS_SCALE_FACTOR;
     }
 
     /**

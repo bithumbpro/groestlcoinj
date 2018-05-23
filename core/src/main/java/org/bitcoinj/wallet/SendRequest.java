@@ -53,10 +53,6 @@ public class SendRequest {
      * mean it has some outputs to the intended destinations, but no inputs or change address (and therefore no
      * fees) - the wallet will calculate all that for you and update tx later.</p>
      *
-     * <p>Be careful when adding outputs that you check the min output value
-     * ({@link TransactionOutput#getMinNonDustValue(Coin)}) to avoid the whole transaction being rejected
-     * because one output is dust.</p>
-     *
      * <p>If there are already inputs to the transaction, make sure their out point has a connected output,
      * otherwise their value will be added to fee.  Also ensure they are either signed or are spendable by a wallet
      * key, otherwise the behavior of {@link Wallet#completeTx(SendRequest)} is undefined (likely
@@ -175,16 +171,18 @@ public class SendRequest {
 
     /**
      * <p>Creates a new SendRequest to the given pubkey for the given value.</p>
-     *
-     * <p>Be careful to check the output's value is reasonable using
-     * {@link TransactionOutput#getMinNonDustValue(Coin)} afterwards or you risk having the transaction
-     * rejected by the network. Note that using {@link SendRequest#to(Address, Coin)} will result
-     * in a smaller output, and thus the ability to use a smaller output value without rejection.</p>
      */
     public static SendRequest to(NetworkParameters params, ECKey destination, Coin value) {
         SendRequest req = new SendRequest();
         req.tx = new Transaction(params);
         req.tx.addOutput(value, destination);
+        return req;
+    }
+
+    public static SendRequest to(NetworkParameters params, Script script, Coin value) {
+        SendRequest req = new SendRequest();
+        req.tx = new Transaction(params);
+        req.tx.addOutput(value, script);
         return req;
     }
 
@@ -201,6 +199,14 @@ public class SendRequest {
         checkNotNull(parameters, "Address is for an unknown network");
         req.tx = new Transaction(parameters);
         req.tx.addOutput(Coin.ZERO, destination);
+        req.emptyWallet = true;
+        return req;
+    }
+
+    public static SendRequest emptyWallet(NetworkParameters params, Script script) {
+        SendRequest req = new SendRequest();
+        req.tx = new Transaction(params);
+        req.tx.addOutput(Coin.ZERO, script);
         req.emptyWallet = true;
         return req;
     }

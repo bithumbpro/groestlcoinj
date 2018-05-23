@@ -113,10 +113,11 @@ public class DeterministicKeyChain implements EncryptableKeyChain {
     // that feature yet. In future we might hand out different accounts for cases where we wish to hand payers
     // a payment request that can generate lots of addresses independently.
     // The account path may be overridden by subclasses.
-    public static final ImmutableList<ChildNumber> ACCOUNT_ZERO_PATH = ImmutableList.of(ChildNumber.ZERO_HARDENED);
-    // m / 44' / 0' / 0'
-    public static final ImmutableList<ChildNumber> BIP44_ACCOUNT_ZERO_PATH = ImmutableList.of(new ChildNumber(44, true),
-            ChildNumber.ZERO_HARDENED, ChildNumber.ZERO_HARDENED);
+
+    public static final ImmutableList<ChildNumber> ACCOUNT_ZERO_PATH =
+            ImmutableList.of(new ChildNumber(84, true),
+                    ChildNumber.ZERO_HARDENED, ChildNumber.ZERO_HARDENED);
+
     public static final ImmutableList<ChildNumber> EXTERNAL_SUBPATH = ImmutableList.of(ChildNumber.ZERO);
     public static final ImmutableList<ChildNumber> INTERNAL_SUBPATH = ImmutableList.of(ChildNumber.ONE);
 
@@ -1365,15 +1366,6 @@ public class DeterministicKeyChain implements EncryptableKeyChain {
         } finally {
             lock.unlock();
         }
-    }
-
-    /**
-     * Whether the keychain is married.  A keychain is married when it vends P2SH addresses
-     * from multiple keychains in a multisig relationship.
-     * @see org.bitcoinj.wallet.MarriedKeyChain
-     */
-    public boolean isMarried() {
-        return false;
     }
 
     /** Get redeem data for a key.  Only applicable to married keychains. */

@@ -32,9 +32,8 @@ public interface KeyChainFactory {
      * @param firstSubKey the protobuf for the first child key (normally the parent of the external subchain)
      * @param seed the seed
      * @param crypter the encrypted/decrypter
-     * @param isMarried whether the keychain is leading in a marriage
      */
-    DeterministicKeyChain makeKeyChain(Protos.Key key, Protos.Key firstSubKey, DeterministicSeed seed, KeyCrypter crypter, boolean isMarried);
+    DeterministicKeyChain makeKeyChain(Protos.Key key, Protos.Key firstSubKey, DeterministicSeed seed, KeyCrypter crypter);
 
     /**
      * Make a keychain (but not a watching one) with the specified account path

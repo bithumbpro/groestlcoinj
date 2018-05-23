@@ -112,7 +112,7 @@ public class ScriptTest {
 
     @Test
     public void testP2SHOutputScript() throws Exception {
-        Address p2shAddress = LegacyAddress.fromBase58(MAINNET, "35b9vsyH1KoFT5a5KtrKusaCcPLkiSo1tU");
+        Address p2shAddress = LegacyAddress.fromBase58(TESTNET, "2N5Z2ti1By4WDri8pboV2Tvq1ZCHcPtnS2u");
         assertTrue(ScriptPattern.isPayToScriptHash(ScriptBuilder.createOutputScript(p2shAddress)));
     }
 
@@ -439,7 +439,7 @@ public class ScriptTest {
     public void getToAddress() throws Exception {
         // pay to pubkey
         ECKey toKey = new ECKey();
-        Address toAddress = LegacyAddress.fromKey(TESTNET, toKey);
+        Address toAddress = SegwitAddress.fromKey(TESTNET, toKey);
         assertEquals(toAddress, ScriptBuilder.createOutputScript(toKey).getToAddress(TESTNET, true));
         // pay to pubkey hash
         assertEquals(toAddress, ScriptBuilder.createOutputScript(toAddress).getToAddress(TESTNET, true));

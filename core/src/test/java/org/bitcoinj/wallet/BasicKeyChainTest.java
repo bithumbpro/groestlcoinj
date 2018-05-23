@@ -182,14 +182,6 @@ public class BasicKeyChainTest {
         chain2.importKeys(ImmutableList.of(encryptedKey));
     }
 
-    @Test(expected = KeyCrypterException.class)
-    public void cannotMixParams() throws Exception {
-        chain = chain.toEncrypted("foobar");
-        KeyCrypterScrypt scrypter = new KeyCrypterScrypt(2);    // Some bogus params.
-        ECKey key1 = new ECKey().encrypt(scrypter, scrypter.deriveKey("other stuff"));
-        chain.importKeys(key1);
-    }
-
     @Test
     public void serializationUnencrypted() throws UnreadableWalletException {
         Utils.setMockClock();
@@ -253,9 +245,7 @@ public class BasicKeyChainTest {
         assertEquals(2, chain.numKeys());
         assertEquals(4, chain.numBloomFilterEntries());
         BloomFilter filter = chain.getFilter(4, 0.001, 100);
-        assertTrue(filter.contains(key1.getPubKey()));
         assertTrue(filter.contains(key1.getPubKeyHash()));
-        assertTrue(filter.contains(key2.getPubKey()));
         assertTrue(filter.contains(key2.getPubKeyHash()));
         ECKey key3 = new ECKey();
         assertFalse(filter.contains(key3.getPubKey()));

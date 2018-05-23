@@ -17,6 +17,8 @@
 
 package org.bitcoinj.store;
 
+import com.google.common.base.Charsets;
+import com.google.common.io.Resources;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
@@ -48,7 +50,6 @@ import org.bitcoinj.wallet.KeyChain;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.ByteString;
 
-import org.bitcoinj.wallet.MarriedKeyChain;
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.Wallet;
@@ -64,6 +65,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
+import java.net.URL;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
@@ -76,6 +78,7 @@ import static org.junit.Assert.*;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class WalletProtobufSerializerTest {
+    private static final NetworkParameters PARAMS = UnitTestParams.get();
     private static final NetworkParameters UNITTEST = UnitTestParams.get();
     private static final NetworkParameters MAINNET = MainNetParams.get();
 
@@ -146,7 +149,7 @@ public class WalletProtobufSerializerTest {
         assertEquals(Protos.Key.Type.ORIGINAL, walletProto.getKey(0).getType());
         assertEquals(0, walletProto.getExtensionCount());
         assertEquals(1, walletProto.getTransactionCount());
-        assertEquals(6, walletProto.getKeyCount());
+        assertEquals(8, walletProto.getKeyCount());
         
         Protos.Transaction t1p = walletProto.getTransaction(0);
         assertEquals(0, t1p.getBlockHashCount());
@@ -214,8 +217,12 @@ public class WalletProtobufSerializerTest {
         assertTrue(lastSeenBlockHash.isEmpty());
 
         // Create a block.
-        Block block = UNITTEST.getDefaultSerializer()
-                .makeBlock(ByteStreams.toByteArray(BlockTest.class.getResourceAsStream("block_testnet700000.dat")));
+        URL resource = BlockTest.class.getResource("block1325549_testnet.txt");
+        String text = Resources.toString(resource, Charsets.UTF_8);
+
+        byte[] block1325549Bytes = Utils.HEX.decode(text);
+        Block block = UNITTEST.getDefaultSerializer().makeBlock(block1325549Bytes);
+
         Sha256Hash blockHash = block.getHash();
         wallet.setLastBlockSeenHash(blockHash);
         wallet.setLastBlockSeenHeight(1);
@@ -359,27 +366,6 @@ public class WalletProtobufSerializerTest {
     }
 
     @Test
-    public void testRoundTripMarriedWallet() throws Exception {
-        // create 2-of-2 married wallet
-        myWallet = new Wallet(UNITTEST);
-        final DeterministicKeyChain partnerChain = new DeterministicKeyChain(new SecureRandom());
-        DeterministicKey partnerKey = DeterministicKey.deserializeB58(null, partnerChain.getWatchingKey().serializePubB58(UNITTEST), UNITTEST);
-        MarriedKeyChain chain = MarriedKeyChain.builder()
-                .random(new SecureRandom())
-                .followingKeys(partnerKey)
-                .threshold(2).build();
-        myWallet.addAndActivateHDChain(chain);
-
-        myAddress = myWallet.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS);
-
-        Wallet wallet1 = roundTrip(myWallet);
-        assertEquals(0, wallet1.getTransactions(true).size());
-        assertEquals(Coin.ZERO, wallet1.getBalance());
-        assertEquals(2, wallet1.getActiveKeyChain().getSigsRequiredToSpend());
-        assertEquals(myAddress, wallet1.currentAddress(KeyChain.KeyPurpose.RECEIVE_FUNDS));
-    }
-
-    @Test
     public void roundtripVersionTwoTransaction() throws Exception {
         Transaction tx = new Transaction(UNITTEST, Utils.HEX.decode(
                 "0200000001d7902864af9310420c6e606b814c8f89f7902d40c130594e85df2e757a7cc301070000006b483045022100ca1757afa1af85c2bb014382d9ce411e1628d2b3d478df9d5d3e9e93cb25dcdd02206c5d272b31a23baf64e82793ee5c816e2bbef251e733a638b630ff2331fc83ba0121026ac2316508287761befbd0f7495ea794b396dbc5b556bf276639f56c0bd08911feffffff0274730700000000001976a91456da2d038a098c42390c77ef163e1cc23aedf24088ac91062300000000001976a9148ebf3467b9a8d7ae7b290da719e61142793392c188ac22e00600"));
@@ -478,13 +464,13 @@ public class WalletProtobufSerializerTest {
     @Test
     public void storeWitnessTransactions() throws Exception {
         // 3 inputs, inputs 0 and 2 have witnesses but not input 1
-        Transaction tx = new Transaction(UNITTEST, Utils.HEX.decode(
+        Transaction tx = new Transaction(PARAMS, Utils.HEX.decode(
                 "02000000000103fc8a5bea59392369e8a1b635395e507a5cbaeffd926e6967a00d17c669aef1d3010000001716001403c80a334ed6a92cf400d8c708522ea0d6fa5593ffffffffc0166d2218a2613b5384fc2c31238b1b6fa337080a1384220734e1bfd3629d3f0100000000ffffffffc0166d2218a2613b5384fc2c31238b1b6fa337080a1384220734e1bfd3629d3f0200000000ffffffff01a086010000000000220020eb72e573a9513d982a01f0e6a6b53e92764db81a0c26d2be94c5fc5b69a0db7d02473044022048e895b7af715303ce273a2be03d6110ed69b5700679f4f036000f8ba6eddd2802205f780423fcce9b3632ed41681b0a86f5d123766b71f303558c39c1be5fe43e2601210259eb16169df80dbe5856d082a226d84a97d191c895f8046c3544df525028a874000220c0166d2218a2613b5384fc2c31238b1b6fa337080a1384220734e1bfd3629d3f20c0166d2218a2613b5384fc2c31238b1b6fa337080a1384220734e1bfd3629d3f00000000"));
-        assertTrue(tx.hasWitnesses());
+        assertTrue(tx.hasWitness());
         assertEquals(tx.getHashAsString(), "1c687396f4710f26206dbdd8bf07a28c76398be6750226ddfaf05a1a80d30034");
         myWallet.addWalletTransaction(new WalletTransaction(Pool.UNSPENT, tx));
         Wallet wallet1 = roundTrip(myWallet);
         Transaction tx2 = wallet1.getTransaction(tx.getHash());
-        assertEquals(tx.getInput(0).getWitness(), tx2.getInput(0).getWitness());
+        assertEquals(tx.getWitness(0), tx2.getWitness(0));
     }
 }

@@ -30,6 +30,7 @@ import java.util.*;
 
 import static org.bitcoinj.core.Coin.*;
 import static org.bitcoinj.core.Sha256Hash.*;
+import static org.bitcoinj.core.Utils.HEX;
 
 /**
  * <p>A block is a group of transactions, and is one of the fundamental data structures of the Bitcoin system.
@@ -50,28 +51,37 @@ public class Block extends Message {
      */
     public enum VerifyFlag {
         /** Check that block height is in coinbase transaction (BIP 34). */
-        HEIGHT_IN_COINBASE
+        HEIGHT_IN_COINBASE,
+        /** Compute block weight and verify witness commitment structure in coinbase. */
+        SEGWIT
     }
 
     private static final Logger log = LoggerFactory.getLogger(Block.class);
 
     /** How many bytes are required to represent a block header WITHOUT the trailing 00 length byte. */
-    public static final int HEADER_SIZE = 80;
-
-    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60; // Same value as Bitcoin Core.
+    public static final int HEADER_SIZE = 84;
+    public static final int LEGACY_HEADER_SIZE = 80;
+    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60;
 
     /**
      * A constant shared by the entire network: how large in bytes a block is allowed to be. One day we may have to
      * upgrade everyone to change this, so Bitcoin can continue to grow. For now it exists as an anti-DoS measure to
      * avoid somebody creating a titanically huge but valid block and forcing everyone to download/store it forever.
      */
-    public static final int MAX_BLOCK_SIZE = 1 * 1000 * 1000;
+    public static final int MAX_BLOCK_SIZE = 1000 * 1000;
+
+    /**
+     * Segwit blocks have a block weight defined as three times base size (block without witness data) plus total size
+     * (block including witness data). It must be less than 4 MB.
+     */
+    public static final int MAX_BLOCK_WEIGHT = 4 * 1000 * 1000;
     /**
      * A "sigop" is a signature verification operation. Because they're expensive we also impose a separate limit on
      * the number in a block to prevent somebody mining a huge block that has way more sigops than normal, so is very
-     * expensive/slow to verify.
+     * expensive/slow to verify. Segwit makes this four times larger, and makes every operation four times more
+     * expensive in non-segwit parts of scripts.
      */
-    public static final int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE / 50;
+    public static final int MAX_BLOCK_SIGOPS = MAX_BLOCK_WEIGHT / 50;
 
     /** A value for difficultyTarget (nBits) that allows half of all possible hash solutions. Used in unit testing. */
     public static final long EASIEST_DIFFICULTY_TARGET = 0x207fFFFFL;
@@ -89,6 +99,11 @@ public class Block extends Message {
     /** Block version introduced in BIP 65: OP_CHECKLOCKTIMEVERIFY */
     public static final long BLOCK_VERSION_BIP65 = 4;
 
+    /** Segwit pubKeyScript header
+     *  OP_RETURN 36 (push to stack) 0xaa21a9ed { 32 bytes commitment structure }
+     * */
+    private static final byte[] SEGWIT_HEADER = HEX.decode("6a24aa21a9ed");
+
     // Fields defined as part of the protocol format.
     private long version;
     private Sha256Hash prevBlockHash;
@@ -96,6 +111,7 @@ public class Block extends Message {
     private long time;
     private long difficultyTarget; // "nBits"
     private long nonce;
+    private long flags;
 
     // TODO: Get rid of all the direct accesses to this field. It's a long-since unnecessary holdover from the Dalvik days.
     /** If null, it means this object holds only the headers. */
@@ -120,7 +136,6 @@ public class Block extends Message {
         difficultyTarget = 0x1d07fff8L;
         time = System.currentTimeMillis() / 1000;
         prevBlockHash = Sha256Hash.ZERO_HASH;
-
         length = HEADER_SIZE;
     }
 
@@ -131,20 +146,6 @@ public class Block extends Message {
     @Deprecated
     public Block(NetworkParameters params, byte[] payloadBytes) throws ProtocolException {
         super(params, payloadBytes, 0, params.getDefaultSerializer(), payloadBytes.length);
-    }
-
-    /**
-     * Construct a block object from the Bitcoin wire format.
-     * @param params NetworkParameters object.
-     * @param payloadBytes the payload to extract the block from.
-     * @param serializer the serializer to use for this message.
-     * @param length The length of message if known.  Usually this is provided when deserializing of the wire
-     * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
-     * @throws ProtocolException
-     */
-    public Block(NetworkParameters params, byte[] payloadBytes, MessageSerializer serializer, int length)
-            throws ProtocolException {
-        super(params, payloadBytes, 0, serializer, length);
     }
 
     /**
@@ -162,61 +163,8 @@ public class Block extends Message {
         super(params, payloadBytes, offset, serializer, length);
     }
 
-    /**
-     * Construct a block object from the Bitcoin wire format. Used in the case of a block
-     * contained within another message (i.e. for AuxPoW header).
-     *
-     * @param params NetworkParameters object.
-     * @param payloadBytes Bitcoin protocol formatted byte array containing message content.
-     * @param offset The location of the first payload byte within the array.
-     * @param parent The message element which contains this block, maybe null for no parent.
-     * @param serializer the serializer to use for this block.
-     * @param length The length of message if known.  Usually this is provided when deserializing of the wire
-     * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
-     * @throws ProtocolException
-     */
-    public Block(NetworkParameters params, byte[] payloadBytes, int offset, @Nullable Message parent, MessageSerializer serializer, int length)
-            throws ProtocolException {
-        // TODO: Keep the parent
-        super(params, payloadBytes, offset, serializer, length);
-    }
-
-    /**
-     * Construct a block initialized with all the given fields.
-     * @param params Which network the block is for.
-     * @param version This should usually be set to 1 or 2, depending on if the height is in the coinbase input.
-     * @param prevBlockHash Reference to previous block in the chain or {@link Sha256Hash#ZERO_HASH} if genesis.
-     * @param merkleRoot The root of the merkle tree formed by the transactions.
-     * @param time UNIX time when the block was mined.
-     * @param difficultyTarget Number which this block hashes lower than.
-     * @param nonce Arbitrary number to make the block hash lower than the target.
-     * @param transactions List of transactions including the coinbase.
-     */
-    public Block(NetworkParameters params, long version, Sha256Hash prevBlockHash, Sha256Hash merkleRoot, long time,
-                 long difficultyTarget, long nonce, List<Transaction> transactions) {
-        super(params);
-        this.version = version;
-        this.prevBlockHash = prevBlockHash;
-        this.merkleRoot = merkleRoot;
-        this.time = time;
-        this.difficultyTarget = difficultyTarget;
-        this.nonce = nonce;
-        this.transactions = new LinkedList<>();
-        this.transactions.addAll(transactions);
-    }
-
-
-    /**
-     * <p>A utility method that calculates how much new Bitcoin would be created by the block at the given height.
-     * The inflation of Bitcoin is predictable and drops roughly every 4 years (210,000 blocks). At the dawn of
-     * the system it was 50 coins per block, in late 2012 it went to 25 coins per block, and so on. The size of
-     * a coinbase transaction is inflation plus fees.</p>
-     *
-     * <p>The half-life is controlled by {@link NetworkParameters#getSubsidyDecreaseBlockCount()}.
-     * </p>
-     */
-    public Coin getBlockInflation(int height) {
-        return FIFTY_COINS.shiftRight(height / params.getSubsidyDecreaseBlockCount());
+    public boolean isProofOfStake() {
+        return (flags & 1) == 1;
     }
 
     /**
@@ -236,8 +184,8 @@ public class Block extends Message {
         }
 
         int numTransactions = (int) readVarInt();
-        optimalEncodingMessageSize += VarInt.sizeOf(numTransactions);
-        transactions = new ArrayList<>(Math.min(numTransactions, Utils.MAX_INITIAL_ARRAY_LENGTH));
+        optimalEncodingMessageSize += VarInt.sizeOf(numTransactions) + (isProofOfStake() ? 1 : 0);
+        transactions = new ArrayList<>(numTransactions);
         for (int i = 0; i < numTransactions; i++) {
             Transaction tx = new Transaction(params, payload, cursor, this, serializer, UNKNOWN_LENGTH);
             // Label the transaction as coming from the P2P network, so code that cares where we first saw it knows.
@@ -259,10 +207,9 @@ public class Block extends Message {
         time = readUint32();
         difficultyTarget = readUint32();
         nonce = readUint32();
-        hash = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(payload, offset, cursor - offset));
+        flags = readUint32();
+        hash = calculateHash();
         headerBytesValid = serializer.isParseRetainMode();
-
-        // transactions
         parseTransactions(offset + HEADER_SIZE);
         length = cursor - offset;
     }
@@ -275,6 +222,15 @@ public class Block extends Message {
     }
 
     // default for testing
+    private void writeHeaderBase(OutputStream stream) throws IOException {
+        Utils.uint32ToByteStreamLE(version, stream);
+        stream.write(prevBlockHash.getReversedBytes());
+        stream.write(getMerkleRoot().getReversedBytes());
+        Utils.uint32ToByteStreamLE(time, stream);
+        Utils.uint32ToByteStreamLE(difficultyTarget, stream);
+        Utils.uint32ToByteStreamLE(nonce, stream);
+    }
+
     void writeHeader(OutputStream stream) throws IOException {
         // try for cached write first
         if (headerBytesValid && payload != null && payload.length >= offset + HEADER_SIZE) {
@@ -282,12 +238,8 @@ public class Block extends Message {
             return;
         }
         // fall back to manual write
-        Utils.uint32ToByteStreamLE(version, stream);
-        stream.write(prevBlockHash.getReversedBytes());
-        stream.write(getMerkleRoot().getReversedBytes());
-        Utils.uint32ToByteStreamLE(time, stream);
-        Utils.uint32ToByteStreamLE(difficultyTarget, stream);
-        Utils.uint32ToByteStreamLE(nonce, stream);
+        writeHeaderBase(stream);
+        Utils.uint32ToByteStreamLE(flags, stream);
     }
 
     private void writeTransactions(OutputStream stream) throws IOException {
@@ -402,9 +354,26 @@ public class Block extends Message {
      */
     private Sha256Hash calculateHash() {
         try {
-            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
-            writeHeader(bos);
-            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bos.toByteArray()));
+            ByteArrayOutputStream bos;
+            byte[] result;
+
+            if (isProofOfStake()) {
+                bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+                writeHeaderBase(bos);
+
+                bos.write((int) (0xFF & flags));
+                bos.write(0);
+                bos.write(0);
+                bos.write(0);
+
+                result = bos.toByteArray();
+            } else {
+                bos = new UnsafeByteArrayOutputStream(LEGACY_HEADER_SIZE);
+                writeHeader(bos);
+                result = Arrays.copyOfRange(bos.toByteArray(), 0, LEGACY_HEADER_SIZE);
+            }
+
+            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(result));
         } catch (IOException e) {
             throw new RuntimeException(e); // Cannot happen.
         }
@@ -459,6 +428,7 @@ public class Block extends Message {
     /** Copy the block without transactions into the provided empty block. */
     protected final void copyBitcoinHeaderTo(final Block block) {
         block.nonce = nonce;
+        block.flags = flags;
         block.prevBlockHash = prevBlockHash;
         block.merkleRoot = getMerkleRoot();
         block.version = version;
@@ -488,6 +458,7 @@ public class Block extends Message {
         s.append("   time: ").append(time).append(" (").append(Utils.dateTimeFormat(time * 1000)).append(")\n");
         s.append("   difficulty target (nBits): ").append(difficultyTarget).append("\n");
         s.append("   nonce: ").append(nonce).append("\n");
+        s.append("   isProofOfStake: ").append(isProofOfStake()).append("\n");
         if (transactions != null && transactions.size() > 0) {
             s.append("   with ").append(transactions.size()).append(" transaction(s):\n");
             for (Transaction tx : transactions) {
@@ -525,7 +496,7 @@ public class Block extends Message {
      */
     public BigInteger getDifficultyTargetAsInteger() throws VerificationException {
         BigInteger target = Utils.decodeCompactBits(difficultyTarget);
-        if (target.signum() <= 0 || target.compareTo(params.maxTarget) > 0)
+        if (target.signum() <= 0 || target.compareTo(params.maxTargetStart) > 0)
             throw new VerificationException("Difficulty target is bad: " + target.toString());
         return target;
     }
@@ -540,9 +511,14 @@ public class Block extends Message {
         //
         // To prevent this attack from being possible, elsewhere we check that the difficultyTarget
         // field is of the right value. This requires us to have the preceeding blocks.
-        BigInteger target = getDifficultyTargetAsInteger();
 
+        if (isProofOfStake()) {
+            return true;
+        }
+
+        BigInteger target = getDifficultyTargetAsInteger();
         BigInteger h = getHash().toBigInteger();
+
         if (h.compareTo(target) > 0) {
             // Proof of work check failed!
             if (throwException)
@@ -581,12 +557,58 @@ public class Block extends Message {
         }
     }
 
+    private void checkSegwitCommit() throws VerificationException {
+        if (transactions == null)
+            throw new VerificationException("No transactions in block");
+        final Transaction coinBase = transactions.get(0);
+        byte[] rootHash = null;
+        for (TransactionOutput out : coinBase.getOutputs()) {
+            final byte[] pkScript = out.getScriptBytes();
+            if (pkScript.length < 38) continue;
+            final byte[] start = Arrays.copyOfRange(pkScript, 0, 6);
+            if (Arrays.equals(start, SEGWIT_HEADER)) {
+                rootHash = Arrays.copyOfRange(pkScript, 6, 38);
+            }
+        }
+        if (rootHash != null
+                && (coinBase.countWitnesses() != 1
+                || coinBase.getWitness(0).getPushCount() != 1
+                || coinBase.getWitness(0).getPush(0).length != 32))
+            throw new VerificationException("Coinbase witness invalid");
+        for (int i = 1; i < transactions.size(); i++) {
+            final Transaction tx = transactions.get(i);
+            if (tx.hasWitness()) {
+                if (rootHash == null)
+                    throw new VerificationException("Transaction witness found but no witness commitment present");
+                break;
+            }
+        }
+        if (rootHash != null) {
+            final byte[] witnessMerkle = calculateMerkleRoot(true).getReversedBytes();
+            final byte[] witnessNonce = coinBase.getWitness(0).getPush(0);
+            final byte[] witnessRoot = Sha256Hash.hashTwice(
+                    witnessMerkle, 0, 32,
+                    witnessNonce, 0, 32);
+            if (!Arrays.equals(witnessRoot, rootHash))
+                throw new VerificationException("Witness merkle root invalid. Expected "
+                        + HEX.encode(rootHash) + " but got " + HEX.encode(witnessRoot));
+        }
+    }
+
     private Sha256Hash calculateMerkleRoot() {
-        List<byte[]> tree = buildMerkleTree();
+        return calculateMerkleRoot(false);
+    }
+
+    private Sha256Hash calculateMerkleRoot(boolean segwit) {
+        List<byte[]> tree = buildMerkleTree(segwit);
         return Sha256Hash.wrap(tree.get(tree.size() - 1));
     }
 
     private List<byte[]> buildMerkleTree() {
+        return buildMerkleTree(false);
+    }
+
+    private List<byte[]> buildMerkleTree(boolean segwit) {
         // The Merkle root is based on a tree of hashes calculated from the transactions:
         //
         //     root
@@ -620,7 +642,7 @@ public class Block extends Message {
         ArrayList<byte[]> tree = new ArrayList<>();
         // Start by adding all the hashes of the transactions as leaves of the tree.
         for (Transaction t : transactions) {
-            tree.add(t.getHash().getBytes());
+            tree.add(t.getHash(segwit).getBytes());
         }
         int levelOffset = 0; // Offset in the list where the currently processed level starts.
         // Step through each level, stopping when we reach the root (levelSize == 1).
@@ -701,6 +723,7 @@ public class Block extends Message {
         checkTransactions(height, flags);
         checkMerkleRoot();
         checkSigOps();
+        if (flags.contains(VerifyFlag.SEGWIT)) checkSegwitCommit();
         for (Transaction transaction : transactions)
             transaction.verify();
         }

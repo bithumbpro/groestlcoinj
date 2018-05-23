@@ -59,6 +59,7 @@ public abstract class Message {
     protected MessageSerializer serializer;
 
     protected int protocolVersion;
+    protected int transactionOptions = TransactionOptions.ALL;
 
     protected NetworkParameters params;
 
@@ -329,7 +330,7 @@ public abstract class Message {
     }
 
     protected byte[] readBytes(int length) throws ProtocolException {
-        if ((length > MAX_SIZE) || (cursor + length > payload.length)) {
+        if (length > MAX_SIZE) {
             throw new ProtocolException("Claimed value length too large: " + length);
         }
         try {
