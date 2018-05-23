@@ -68,6 +68,7 @@ public class TransactionSignature extends ECKey.ECDSASignature {
 
     /** Calculates the byte used in the protocol to represent the combination of mode and anyoneCanPay. */
     public static int calcSigHashValue(Transaction.SigHash mode, boolean anyoneCanPay) {
+        Preconditions.checkArgument(SigHash.ALL == mode || SigHash.NONE == mode || SigHash.SINGLE == mode); // enforce compatibility since this code was made before the SigHash enum was updated
         int sighashFlags = mode.value;
         if (anyoneCanPay)
             sighashFlags |= Transaction.SigHash.ANYONECANPAY.value;
@@ -91,8 +92,7 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         if (signature.length < 9 || signature.length > 73)
             return false;
 
-        // mask the byte to prevent sign-extension hurting us
-        int hashType = (signature[signature.length-1] & 0xff) & ~(Transaction.SigHash.ANYONECANPAY.value | Transaction.FORK_ID);
+        int hashType = (signature[signature.length-1] & 0xff) & ~Transaction.SigHash.ANYONECANPAY.value; // mask the byte to prevent sign-extension hurting us
         if (hashType < Transaction.SigHash.ALL.value || hashType > Transaction.SigHash.SINGLE.value)
             return false;
 
@@ -128,12 +128,12 @@ public class TransactionSignature extends ECKey.ECDSASignature {
 
     public Transaction.SigHash sigHashMode() {
         final int mode = sighashFlags & 0x1f;
-        if (mode == SigHash.NONE.value)
-            return SigHash.NONE;
+        if (mode == Transaction.SigHash.NONE.value)
+            return Transaction.SigHash.NONE;
         else if (mode == Transaction.SigHash.SINGLE.value)
-            return SigHash.SINGLE;
+            return Transaction.SigHash.SINGLE;
         else
-            return SigHash.BCAFORK;
+            return Transaction.SigHash.ALL;
     }
 
     /**

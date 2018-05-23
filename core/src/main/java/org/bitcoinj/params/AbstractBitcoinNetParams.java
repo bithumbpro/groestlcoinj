@@ -39,114 +39,108 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Stopwatch;
 
 import org.bitcoinj.core.BitcoinSerializer;
-import org.spongycastle.util.Store;
 
 /**
  * Parameters for Bitcoin-like networks.
  */
 public abstract class AbstractBitcoinNetParams extends NetworkParameters {
-    private static final Logger log = LoggerFactory.getLogger(AbstractBitcoinNetParams.class);
+
+    /**
+     * Scheme part for Bitcoin URIs.
+     */
     public static final String BITCOIN_SCHEME = "bitcoin";
+    public static final int REWARD_HALVING_INTERVAL = 210000;
+
+    private static final Logger log = LoggerFactory.getLogger(AbstractBitcoinNetParams.class);
 
     public AbstractBitcoinNetParams() {
         super();
     }
 
-    private StoredBlock findPrevStoredPoSBlock(final StoredBlock storedPrev, final BlockStore blockStore)
-            throws VerificationException, BlockStoreException {
-
-        StoredBlock resultStoredBlock = storedPrev;
-
-        while (!resultStoredBlock.getHeader().isProofOfStake()) {
-            StoredBlock cursor = resultStoredBlock.getPrev(blockStore);
-            if (null == cursor || cursor.getHeight() <= BCAHeight) return null;
-            else resultStoredBlock = cursor;
-        }
-
-        return resultStoredBlock;
+    /**
+     * Checks if we are at a reward halving point.
+     * @param height The height of the previous stored block
+     * @return If this is a reward halving point
+     */
+    public final boolean isRewardHalvingPoint(final int height) {
+        return ((height + 1) % REWARD_HALVING_INTERVAL) == 0;
     }
 
-    private long getNextWorkRequiredForPoS(final StoredBlock storedPrev, final BlockStore blockStore)
-            throws VerificationException, BlockStoreException {
-
-        checkState(storedPrev.getHeight() + 1 > BCAHeight + BCAInitLim, "PoS block height is incorrect");
-
-        StoredBlock prevPoSBlock = findPrevStoredPoSBlock(storedPrev, blockStore);
-        if (null == prevPoSBlock) return Utils.encodeCompactBits(initialHashTargetPoS);
-
-        StoredBlock prevPrevPoSBlock = findPrevStoredPoSBlock(prevPoSBlock.getPrev(blockStore), blockStore);
-        if (null == prevPrevPoSBlock || null == prevPrevPoSBlock.getPrev(blockStore)) return Utils.encodeCompactBits(initialHashTargetPoS);
-
-        long actualSpacing = prevPoSBlock.getHeader().getTimeSeconds() - prevPrevPoSBlock.getHeader().getTimeSeconds();
-        BigInteger posTarget = Utils.decodeCompactBits(prevPoSBlock.getHeader().getDifficultyTarget());
-
-        posTarget = posTarget.multiply(BigInteger.valueOf((POS_INTERVAL - 1) * POS_TARGET_SPACING + actualSpacing + actualSpacing));
-        posTarget = posTarget.divide(BigInteger.valueOf((POS_INTERVAL + 1) * POS_TARGET_SPACING));
-
-        if (posTarget.compareTo(this.getMaxTarget()) > 0) {
-            log.info("PoS difficulty hit proof of work limit: {}", posTarget.toString(16));
-            posTarget = this.getMaxTarget();
-        }
-
-        return Utils.encodeCompactBits(posTarget);
-    }
-
-    private long getNextWorkRequiredForPoW(final StoredBlock storedPrev, final BlockStore blockStore)
-            throws VerificationException, BlockStoreException {
-
-        int i = 0;
-        StoredBlock storedFirst = storedPrev;
-        BigInteger totalDifficulty = BigInteger.ZERO;
-        while (null != storedFirst && i < POW_AVERAGING_WINDOW) {
-            if (!storedFirst.getHeader().isProofOfStake()) {
-                totalDifficulty = totalDifficulty.add(storedFirst.getHeader().getDifficultyTargetAsInteger());
-                ++i;
-            }
-
-            storedFirst = storedFirst.getPrev(blockStore);
-        }
-
-        if (null == storedFirst) {
-            return Utils.encodeCompactBits(this.getMaxTarget());
-        }
-
-        BigInteger avg = totalDifficulty.divide(BigInteger.valueOf(POW_AVERAGING_WINDOW));
-        return calculateNextWorkRequired(avg, storedPrev.getHeader().getTimeSeconds(), storedFirst.getHeader().getTimeSeconds());
-    }
-
-    private long calculateNextWorkRequired(BigInteger avg, long lastBlockTime, long firstBlockTime) {
-        long actualTimespan = lastBlockTime - firstBlockTime;
-        actualTimespan = POW_AVERAGING_WINDOW_TIMESPAN + (actualTimespan - POW_AVERAGING_WINDOW_TIMESPAN) / 4;
-
-        avg = avg.divide(BigInteger.valueOf(POW_AVERAGING_WINDOW_TIMESPAN));
-        avg = avg.multiply(BigInteger.valueOf(actualTimespan));
-
-        if (avg.compareTo(this.getMaxTarget()) > 0) {
-            log.info("PoS difficulty hit proof of work limit: {}", avg.toString(16));
-            avg = this.getMaxTarget();
-        }
-
-        return Utils.encodeCompactBits(avg);
+    /**
+     * Checks if we are at a difficulty transition point.
+     * @param height The height of the previous stored block
+     * @return If this is a difficulty transition point
+     */
+    public final boolean isDifficultyTransitionPoint(final int height) {
+        return ((height + 1) % this.getInterval()) == 0;
     }
 
     @Override
     public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
     	final BlockStore blockStore) throws VerificationException, BlockStoreException {
+        final Block prev = storedPrev.getHeader();
 
-        int nHeight = storedPrev.getHeight() + 1;
-        if (nHeight >= newDifficultyAdjustmentAlgoHeight) {
+        // Is this supposed to be a difficulty transition point?
+        if (!isDifficultyTransitionPoint(storedPrev.getHeight())) {
 
-            long newTargetCompact = nextBlock.isProofOfStake() ?
-                    getNextWorkRequiredForPoS(storedPrev, blockStore) :
-                    getNextWorkRequiredForPoW(storedPrev, blockStore);
-
-            long receivedTargetCompact = nextBlock.getDifficultyTarget();
-
-            if (newTargetCompact != receivedTargetCompact) {
-                throw new VerificationException("Network provided difficulty bits do not match what was calculated, calculated: " +
-                        Long.toHexString(newTargetCompact) + " vs received: " + Long.toHexString(receivedTargetCompact));
-            }
+            // No ... so check the difficulty didn't actually change.
+            if (nextBlock.getDifficultyTarget() != prev.getDifficultyTarget())
+                throw new VerificationException("Unexpected change in difficulty at height " + storedPrev.getHeight() +
+                        ": " + Long.toHexString(nextBlock.getDifficultyTarget()) + " vs " +
+                        Long.toHexString(prev.getDifficultyTarget()));
+            return;
         }
+
+        // We need to find a block far back in the chain. It's OK that this is expensive because it only occurs every
+        // two weeks after the initial block chain download.
+        final Stopwatch watch = Stopwatch.createStarted();
+        Sha256Hash hash = prev.getHash();
+        StoredBlock cursor = null;
+        final int interval = this.getInterval();
+        for (int i = 0; i < interval; i++) {
+            cursor = blockStore.get(hash);
+            if (cursor == null) {
+                // This should never happen. If it does, it means we are following an incorrect or busted chain.
+                throw new VerificationException(
+                        "Difficulty transition point but we did not find a way back to the last transition point. Not found: " + hash);
+            }
+            hash = cursor.getHeader().getPrevBlockHash();
+        }
+        checkState(cursor != null && isDifficultyTransitionPoint(cursor.getHeight() - 1),
+                "Didn't arrive at a transition point.");
+        watch.stop();
+        if (watch.elapsed(TimeUnit.MILLISECONDS) > 50)
+            log.info("Difficulty transition traversal took {}", watch);
+
+        Block blockIntervalAgo = cursor.getHeader();
+        int timespan = (int) (prev.getTimeSeconds() - blockIntervalAgo.getTimeSeconds());
+        // Limit the adjustment step.
+        final int targetTimespan = this.getTargetTimespan();
+        if (timespan < targetTimespan / 4)
+            timespan = targetTimespan / 4;
+        if (timespan > targetTimespan * 4)
+            timespan = targetTimespan * 4;
+
+        BigInteger newTarget = Utils.decodeCompactBits(prev.getDifficultyTarget());
+        newTarget = newTarget.multiply(BigInteger.valueOf(timespan));
+        newTarget = newTarget.divide(BigInteger.valueOf(targetTimespan));
+
+        if (newTarget.compareTo(this.getMaxTarget()) > 0) {
+            log.info("Difficulty hit proof of work limit: {}", newTarget.toString(16));
+            newTarget = this.getMaxTarget();
+        }
+
+        int accuracyBytes = (int) (nextBlock.getDifficultyTarget() >>> 24) - 3;
+        long receivedTargetCompact = nextBlock.getDifficultyTarget();
+
+        // The calculated difficulty is to a higher precision than received, so reduce here.
+        BigInteger mask = BigInteger.valueOf(0xFFFFFFL).shiftLeft(accuracyBytes * 8);
+        newTarget = newTarget.and(mask);
+        long newTargetCompact = Utils.encodeCompactBits(newTarget);
+
+        if (newTargetCompact != receivedTargetCompact)
+            throw new VerificationException("Network provided difficulty bits do not match what was calculated: " +
+                    Long.toHexString(newTargetCompact) + " vs " + Long.toHexString(receivedTargetCompact));
     }
 
     @Override

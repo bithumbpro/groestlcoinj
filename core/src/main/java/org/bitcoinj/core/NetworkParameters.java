@@ -47,11 +47,11 @@ import org.bitcoinj.utils.VersionTally;
  */
 public abstract class NetworkParameters {
     /** The string returned by getId() for the main, production network where people trade things. */
-    public static final String ID_MAINNET = "io.bitcoinatom.production";
+    public static final String ID_MAINNET = "org.bitcoin.production";
     /** The string returned by getId() for the testnet. */
-    public static final String ID_TESTNET = "io.bitcoinatom.test";
+    public static final String ID_TESTNET = "org.bitcoin.test";
     /** The string returned by getId() for regtest mode. */
-    public static final String ID_REGTEST = "io.bitcoinatom.regtest";
+    public static final String ID_REGTEST = "org.bitcoin.regtest";
     /** Unit test network. */
     public static final String ID_UNITTESTNET = "org.bitcoinj.unittest";
 
@@ -67,9 +67,6 @@ public abstract class NetworkParameters {
 
     protected Block genesisBlock;
     protected BigInteger maxTarget;
-    protected BigInteger maxTargetStart;
-    protected BigInteger initialHashTargetPoS;
-
     protected int port;
     protected long packetMagic;  // Indicates message origin network and is used to seek to the next message when stream state is unknown.
     protected int addressHeader;
@@ -80,10 +77,6 @@ public abstract class NetworkParameters {
     protected int targetTimespan;
     protected int bip32HeaderPub;
     protected int bip32HeaderPriv;
-
-    protected int BCAHeight;
-    protected int BCAInitLim;
-    protected int newDifficultyAdjustmentAlgoHeight;
 
     /** Used to check majorities for block version upgrade */
     protected int majorityEnforceBlockUpgrade;
@@ -101,7 +94,7 @@ public abstract class NetworkParameters {
      */
     protected int spendableCoinbaseDepth;
     protected int subsidyDecreaseBlockCount;
-
+    
     protected String[] dnsSeeds;
     protected int[] addrSeeds;
     protected HttpDiscovery.Details[] httpSeeds = {};
@@ -135,16 +128,10 @@ public abstract class NetworkParameters {
         return genesisBlock;
     }
 
-    public static final int POS_TARGET_TIMESPAN = 14 * 24 * 60 * 60;
-    public static final int POS_TARGET_SPACING = 10 * 60;
-    public static final int POS_INTERVAL = POS_TARGET_TIMESPAN / POS_TARGET_SPACING;
-
-    public static final int POW_AVERAGING_WINDOW = 11;
     public static final int TARGET_TIMESPAN = 14 * 24 * 60 * 60;  // 2 weeks per difficulty cycle, on average.
     public static final int TARGET_SPACING = 10 * 60;  // 10 minutes per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;
-    public static final int POW_AVERAGING_WINDOW_TIMESPAN = POW_AVERAGING_WINDOW * TARGET_SPACING;
-
+    
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
      * network rules in a soft-forking manner, that is, blocks that don't follow the rules are accepted but not
@@ -465,13 +452,13 @@ public abstract class NetworkParameters {
      * The flags indicating which block validation tests should be applied to
      * the given block. Enables support for alternative blockchains which enable
      * tests based on different criteria.
-     *
+     * 
      * @param block block to determine flags for.
      * @param height height of the block, if known, null otherwise. Returned
      * tests should be a safe subset if block height is unknown.
      */
     public EnumSet<Block.VerifyFlag> getBlockVerificationFlags(final Block block,
-                                                               final VersionTally tally, final Integer height) {
+            final VersionTally tally, final Integer height) {
         final EnumSet<Block.VerifyFlag> flags = EnumSet.noneOf(Block.VerifyFlag.class);
 
         if (block.isBIP34()) {
@@ -494,7 +481,7 @@ public abstract class NetworkParameters {
      * tests should be a safe subset if block height is unknown.
      */
     public EnumSet<Script.VerifyFlag> getTransactionVerificationFlags(final Block block,
-                                                                      final Transaction transaction, final VersionTally tally, final Integer height) {
+            final Transaction transaction, final VersionTally tally, final Integer height) {
         final EnumSet<Script.VerifyFlag> verifyFlags = EnumSet.noneOf(Script.VerifyFlag.class);
         if (block.getTimeSeconds() >= NetworkParameters.BIP16_ENFORCE_TIME)
             verifyFlags.add(Script.VerifyFlag.P2SH);
@@ -502,7 +489,7 @@ public abstract class NetworkParameters {
         // Start enforcing CHECKLOCKTIMEVERIFY, (BIP65) for block.nVersion=4
         // blocks, when 75% of the network has upgraded:
         if (block.getVersion() >= Block.BLOCK_VERSION_BIP65 &&
-                tally.getCountAtOrAbove(Block.BLOCK_VERSION_BIP65) > this.getMajorityEnforceBlockUpgrade()) {
+            tally.getCountAtOrAbove(Block.BLOCK_VERSION_BIP65) > this.getMajorityEnforceBlockUpgrade()) {
             verifyFlags.add(Script.VerifyFlag.CHECKLOCKTIMEVERIFY);
         }
 
@@ -516,7 +503,7 @@ public abstract class NetworkParameters {
         PONG(60001),
         BLOOM_FILTER(70000),
         WITNESS_VERSION(70012),
-        CURRENT(70020);
+        CURRENT(70012);
 
         private final int bitcoinProtocol;
 

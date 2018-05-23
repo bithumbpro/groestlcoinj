@@ -42,41 +42,33 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
     public TestNet3Params() {
         super();
         id = ID_TESTNET;
+        packetMagic = 0x0b110907;
         interval = INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
-        maxTarget = new BigInteger("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-        maxTargetStart = new BigInteger("000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-        initialHashTargetPoS = new BigInteger("00000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-
-        port = 17333;
+        maxTarget = Utils.decodeCompactBits(0x1d00ffffL);
+        port = 18333;
         addressHeader = 111;
         p2shHeader = 196;
         dumpedPrivateKeyHeader = 239;
-        segwitAddressHrp = "tbca";
-
-        genesisBlock.setDifficultyTarget(Utils.encodeCompactBits(maxTarget));
+        segwitAddressHrp = "tb";
         genesisBlock.setTime(1296688602L);
+        genesisBlock.setDifficultyTarget(0x1d00ffffL);
         genesisBlock.setNonce(414098458);
-
         spendableCoinbaseDepth = 100;
         subsidyDecreaseBlockCount = 210000;
         String genesisHash = genesisBlock.getHashAsString();
         checkState(genesisHash.equals("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
 
         dnsSeeds = new String[] {
-                "testnet-seed.bitcoinatom.io",
-                "testnet-seed.bitcoinatom.org",
-                "testnet-seed.bitcoinatom.net",
+                "testnet-seed.bitcoin.jonasschnelli.ch", // Jonas Schnelli
+                "testnet-seed.bluematt.me",              // Matt Corallo
+                "testnet-seed.bitcoin.petertodd.org",    // Peter Todd
+                "testnet-seed.bitcoin.schildbach.de",    // Andreas Schildbach
+                "bitcoin-testnet.bloqseeds.net",         // Bloq
         };
-
         addrSeeds = null;
-        packetMagic = 0xa68e3fd6L;
         bip32HeaderPub = 0x043587CF;
         bip32HeaderPriv = 0x04358394;
-
-        BCAHeight = 1260000;
-        BCAInitLim = 50000;
-        newDifficultyAdjustmentAlgoHeight = 1314131;
 
         majorityEnforceBlockUpgrade = TESTNET_MAJORITY_ENFORCE_BLOCK_UPGRADE;
         majorityRejectBlockOutdated = TESTNET_MAJORITY_REJECT_BLOCK_OUTDATED;
@@ -94,5 +86,40 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
     @Override
     public String getPaymentProtocolId() {
         return PAYMENT_PROTOCOL_ID_TESTNET;
+    }
+
+    // February 16th 2012
+    private static final Date testnetDiffDate = new Date(1329264000000L);
+
+    @Override
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+                                           final BlockStore blockStore) throws VerificationException, BlockStoreException {
+        if (!isDifficultyTransitionPoint(storedPrev.getHeight()) && nextBlock.getTime().after(testnetDiffDate)) {
+            Block prev = storedPrev.getHeader();
+
+            // After 15th February 2012 the rules on the testnet change to avoid people running up the difficulty
+            // and then leaving, making it too hard to mine a block. On non-difficulty transition points, easy
+            // blocks are allowed if there has been a span of 20 minutes without one.
+            final long timeDelta = nextBlock.getTimeSeconds() - prev.getTimeSeconds();
+            // There is an integer underflow bug in bitcoin-qt that means mindiff blocks are accepted when time
+            // goes backwards.
+            if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 2) {
+                // Walk backwards until we find a block that doesn't have the easiest proof of work, then check
+                // that difficulty is equal to that one.
+                StoredBlock cursor = storedPrev;
+                while (!cursor.getHeader().equals(getGenesisBlock()) &&
+                        cursor.getHeight() % getInterval() != 0 &&
+                        cursor.getHeader().getDifficultyTargetAsInteger().equals(getMaxTarget()))
+                    cursor = cursor.getPrev(blockStore);
+                BigInteger cursorTarget = cursor.getHeader().getDifficultyTargetAsInteger();
+                BigInteger newTarget = nextBlock.getDifficultyTargetAsInteger();
+                if (!cursorTarget.equals(newTarget))
+                    throw new VerificationException("Testnet block transition that is not allowed: " +
+                            Long.toHexString(cursor.getHeader().getDifficultyTarget()) + " vs " +
+                            Long.toHexString(nextBlock.getDifficultyTarget()));
+            }
+        } else {
+            super.checkDifficultyTransitions(storedPrev, nextBlock, blockStore);
+        }
     }
 }

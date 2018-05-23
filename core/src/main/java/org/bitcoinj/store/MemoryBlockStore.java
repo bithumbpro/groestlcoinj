@@ -38,11 +38,13 @@ public class MemoryBlockStore implements BlockStore {
         // Insert the genesis block.
         try {
             Block genesisHeader = params.getGenesisBlock().cloneAsHeader();
-            StoredBlock storedGenesis = new StoredBlock(genesisHeader, genesisHeader.getWork(), 0, 0);
+            StoredBlock storedGenesis = new StoredBlock(genesisHeader, genesisHeader.getWork(), 0);
             put(storedGenesis);
             setChainHead(storedGenesis);
             this.params = params;
         } catch (BlockStoreException e) {
+            throw new RuntimeException(e);  // Cannot happen.
+        } catch (VerificationException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
     }

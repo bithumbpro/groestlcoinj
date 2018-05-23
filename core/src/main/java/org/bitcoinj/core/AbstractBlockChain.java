@@ -491,9 +491,6 @@ public abstract class AbstractBlockChain {
                 tryConnectingOrphans();
 
             return true;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
         } finally {
             lock.unlock();
         }

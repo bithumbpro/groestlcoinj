@@ -28,6 +28,9 @@ import java.util.EnumSet;
  * {@link Block#solve()} by setting difficulty to the easiest possible.
  */
 public class UnitTestParams extends AbstractBitcoinNetParams {
+    public static final int UNITNET_MAJORITY_WINDOW = 8;
+    public static final int TESTNET_MAJORITY_REJECT_BLOCK_OUTDATED = 6;
+    public static final int TESTNET_MAJORITY_ENFORCE_BLOCK_UPGRADE = 4;
 
     public UnitTestParams() {
         super();
@@ -35,18 +38,14 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
         packetMagic = 0x0b110907;
         addressHeader = 111;
         p2shHeader = 196;
-
-        maxTarget = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-        maxTargetStart = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-        initialHashTargetPoS = new BigInteger("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
-
+        maxTarget = new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
         genesisBlock.solve();
         port = 18333;
         interval = 10;
         dumpedPrivateKeyHeader = 239;
-        segwitAddressHrp = "tbca";
+        segwitAddressHrp = "tb";
         targetTimespan = 200000000;  // 6 years. Just a very big number.
         spendableCoinbaseDepth = 5;
         subsidyDecreaseBlockCount = 100;
@@ -71,5 +70,30 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
     @Override
     public String getPaymentProtocolId() {
         return "unittest";
+    }
+
+    // TODO: implement BIP-9 instead
+    @Override
+    public EnumSet<Script.VerifyFlag> getTransactionVerificationFlags(
+            final Block block,
+            final Transaction transaction,
+            final VersionTally tally,
+            final Integer height)
+    {
+        final EnumSet<Script.VerifyFlag> flags = super.getTransactionVerificationFlags(block, transaction, tally, height);
+        flags.add(Script.VerifyFlag.SEGWIT);
+        return flags;
+    }
+
+    // TODO: implement BIP-9 instead
+    @Override
+    public EnumSet<Block.VerifyFlag> getBlockVerificationFlags(
+            final Block block,
+            final VersionTally tally,
+            final Integer height)
+    {
+        EnumSet<Block.VerifyFlag> flags = super.getBlockVerificationFlags(block, tally, height);
+        flags.add(Block.VerifyFlag.SEGWIT);
+        return flags;
     }
 }

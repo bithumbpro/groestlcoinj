@@ -113,7 +113,7 @@ public class Transaction extends ChildMessage {
      * If using this feePerKb, transactions will get confirmed within the next couple of blocks.
      * This should be adjusted from time to time. Last adjustment: February 2017.
      */
-    public static final Coin DEFAULT_TX_FEE = Coin.valueOf(20000); // 1 mBTC
+    public static final Coin DEFAULT_TX_FEE = Coin.valueOf(100000); // 1 mBTC
 
     /**
      * Any standard (ie P2PKH) output smaller than this value (in satoshis) will most likely be rejected by the network.
@@ -599,8 +599,6 @@ public class Transaction extends ChildMessage {
         this.updatedAt = updatedAt;
     }
 
-    public static int FORK_ID = 0x40;
-
     /**
      * These constants are a part of a scriptSig signature on the inputs. They define the details of how a
      * transaction can be redeemed, specifically, they control how the hash of the transaction is calculated.
@@ -609,9 +607,6 @@ public class Transaction extends ChildMessage {
         ALL(1),
         NONE(2),
         SINGLE(3),
-
-        BCAFORK(1 | FORK_ID | 93 << 8),
-
         ANYONECANPAY(0x80), // Caution: Using this type in isolation is non-standard. Treated similar to ANYONECANPAY_ALL.
         ANYONECANPAY_ALL(0x81),
         ANYONECANPAY_NONE(0x82),
@@ -634,6 +629,11 @@ public class Transaction extends ChildMessage {
             return (byte) this.value;
         }
     }
+
+    /**
+     * @deprecated Instead use SigHash.ANYONECANPAY.value or SigHash.ANYONECANPAY.byteValue() as appropriate.
+     */
+    public static final byte SIGHASH_ANYONECANPAY_VALUE = (byte) 0x80;
 
     @Override
     protected void unCache() {
@@ -1449,13 +1449,13 @@ public class Transaction extends ChildMessage {
             SigHash type,
             boolean anyoneCanPay)
     {
-        int sigHashType = TransactionSignature.calcSigHashValue(type, anyoneCanPay);
+        byte sigHashType = (byte) TransactionSignature.calcSigHashValue(type, anyoneCanPay);
         ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(length == UNKNOWN_LENGTH ? 256 : length + 4);
         try {
             byte[] hashPrevouts = new byte[32];
             byte[] hashSequence = new byte[32];
             byte[] hashOutputs = new byte[32];
-            anyoneCanPay = (sigHashType & SigHash.ANYONECANPAY.byteValue()) == SigHash.ANYONECANPAY.byteValue();
+            anyoneCanPay = (sigHashType & SIGHASH_ANYONECANPAY_VALUE) == SIGHASH_ANYONECANPAY_VALUE;
 
             if (!anyoneCanPay) {
                 ByteArrayOutputStream bosHashPrevouts = new UnsafeByteArrayOutputStream(256);
@@ -1506,7 +1506,7 @@ public class Transaction extends ChildMessage {
             uint32ToByteStreamLE(inputs.get(inputIndex).getSequenceNumber(), bos);
             bos.write(hashOutputs);
             uint32ToByteStreamLE(this.lockTime, bos);
-            uint32ToByteStreamLE(sigHashType, bos);
+            uint32ToByteStreamLE(0x000000ff & sigHashType, bos);
         } catch (IOException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }

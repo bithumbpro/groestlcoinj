@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * {@link TransactionSigner.ProposedTransaction} object that will be also passed then to the next signer in chain. This allows other
  * signers to use correct signing key for P2SH inputs, because all the keys involved in a single P2SH address have
  * the same derivation path.</p>
- * <p>This signer always uses {@link Transaction.SigHash#BCAFORK} signing mode.</p>
+ * <p>This signer always uses {@link Transaction.SigHash#ALL} signing mode.</p>
  */
 public class LocalTransactionSigner implements TransactionSigner {
     private static final Logger log = LoggerFactory.getLogger(LocalTransactionSigner.class);
@@ -89,7 +89,7 @@ public class LocalTransactionSigner implements TransactionSigner {
 
                     byte[] script = redeemData.redeemScript.scriptCode().getProgram();
                     TransactionSignature signatureWitness = tx.calculateWitnessSignature(i, key, script,
-                            txIn.getConnectedOutput().getValue(), Transaction.SigHash.BCAFORK, false);
+                            txIn.getConnectedOutput().getValue(), Transaction.SigHash.ALL, false);
 
                     TransactionWitness witness = new TransactionWitness(2);
                     witness.setPush(0, signatureWitness.encodeToBitcoin());
@@ -100,7 +100,7 @@ public class LocalTransactionSigner implements TransactionSigner {
 
                     Script inputScript = txIn.getScriptSig();
                     byte[] script = redeemData.redeemScript.getProgram();
-                    TransactionSignature signature = tx.calculateSignature(i, key, script, Transaction.SigHash.BCAFORK, false);
+                    TransactionSignature signature = tx.calculateSignature(i, key, script, Transaction.SigHash.ALL, false);
 
                     // at this point we have incomplete inputScript with OP_0 in place of one or more signatures. We already
                     // have calculated the signature using the local key and now need to insert it in the correct place

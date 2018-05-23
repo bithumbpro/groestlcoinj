@@ -248,6 +248,39 @@ public class WalletTest extends TestWithWallet {
         Coin v2 = valueOf(0, 50);
         req = SendRequest.to(destination, v2);
 
+        if (encryptedWallet != null) {
+            KeyCrypter keyCrypter = encryptedWallet.getKeyCrypter();
+            KeyParameter aesKey = keyCrypter.deriveKey(PASSWORD1);
+            KeyParameter wrongAesKey = keyCrypter.deriveKey(WRONG_PASSWORD);
+
+            // Try to create a send with a fee but no password (this should fail).
+            try {
+                wallet.completeTx(req);
+                fail();
+            } catch (ECKey.MissingPrivateKeyException kce) {
+            }
+            assertEquals("Wrong number of UNSPENT", 1, wallet.getPoolSize(WalletTransaction.Pool.UNSPENT));
+            assertEquals("Wrong number of ALL", 1, wallet.getTransactions(true).size());
+
+            // Try to create a send with a fee but the wrong password (this should fail).
+            req = SendRequest.to(destination, v2);
+            req.aesKey = wrongAesKey;
+
+            try {
+                wallet.completeTx(req);
+                fail("No exception was thrown trying to sign an encrypted key with the wrong password supplied.");
+            } catch (KeyCrypterException kce) {
+                assertEquals("Could not decrypt bytes", kce.getMessage());
+            }
+
+            assertEquals("Wrong number of UNSPENT", 1, wallet.getPoolSize(WalletTransaction.Pool.UNSPENT));
+            assertEquals("Wrong number of ALL", 1, wallet.getTransactions(true).size());
+
+            // Create a send with a fee with the correct password (this should succeed).
+            req = SendRequest.to(destination, v2);
+            req.aesKey = aesKey;
+        }
+
         // Complete the transaction successfully.
         req.shuffleOutputs = false;
         wallet.completeTx(req);
@@ -2088,7 +2121,7 @@ public class WalletTest extends TestWithWallet {
     @Test
     public void transactionGetFeeTest() throws Exception {
         // Prepare wallet to spend
-        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1, 1);
+        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1);
         Transaction tx = createFakeTx(UNITTEST, COIN, myAddress);
         wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
 
@@ -2143,7 +2176,7 @@ public class WalletTest extends TestWithWallet {
         // Tests calling completeTx with a SendRequest that already has a few inputs in it
 
         // Generate a few outputs to us
-        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1, 1);
+        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1);
         Transaction tx1 = createFakeTx(UNITTEST, COIN, myAddress);
         wallet.receiveFromBlock(tx1, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
         Transaction tx2 = createFakeTx(UNITTEST, COIN, myAddress);
@@ -2229,7 +2262,7 @@ public class WalletTest extends TestWithWallet {
     @Test
     public void testEmptyRandomWallet() throws Exception {
         // Add a random set of outputs
-        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1, 1);
+        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1);
         Random rng = new Random();
         for (int i = 0; i < rng.nextInt(100) + 1; i++) {
             Transaction tx = createFakeTx(UNITTEST, Coin.valueOf(rng.nextInt((int) COIN.value)), myAddress);
@@ -2244,7 +2277,7 @@ public class WalletTest extends TestWithWallet {
     @Test
     public void testEmptyWallet() throws Exception {
         // Add exactly 0.01
-        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1, 1);
+        StoredBlock block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 1);
         Transaction tx = createFakeTx(UNITTEST, CENT, myAddress);
         wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
         SendRequest request = SendRequest.emptyWallet(OTHER_ADDRESS);
@@ -2256,7 +2289,7 @@ public class WalletTest extends TestWithWallet {
 
         // Add 1 confirmed cent and 1 unconfirmed cent. Verify only one cent is emptied because of the coin selection
         // policies that are in use by default.
-        block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 2, 2);
+        block = new StoredBlock(makeSolvedTestBlock(blockStore, OTHER_ADDRESS), BigInteger.ONE, 2);
         tx = createFakeTx(UNITTEST, CENT, myAddress);
         wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);
         tx = createFakeTx(UNITTEST, CENT, myAddress);
@@ -2269,7 +2302,7 @@ public class WalletTest extends TestWithWallet {
         assertEquals(CENT, request.tx.getOutput(0).getValue());
 
         // Add an unsendable value
-        block = new StoredBlock(block.getHeader().createNextBlock(OTHER_ADDRESS), BigInteger.ONE, 3, 3);
+        block = new StoredBlock(block.getHeader().createNextBlock(OTHER_ADDRESS), BigInteger.ONE, 3);
         Coin outputValue = Transaction.MIN_NONDUST_OUTPUT.subtract(SATOSHI);
         tx = createFakeTx(UNITTEST, outputValue, myAddress);
         wallet.receiveFromBlock(tx, block, AbstractBlockChain.NewBlockType.BEST_CHAIN, 0);

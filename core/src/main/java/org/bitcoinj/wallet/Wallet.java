@@ -225,6 +225,9 @@ public class Wallet extends BaseTaggableObject
     protected volatile WalletFiles vFileManager;
     // Object that is used to send transactions asynchronously when the wallet requires it.
     protected volatile TransactionBroadcaster vTransactionBroadcaster;
+    // UNIX time in seconds. Money controlled by keys created before this time will be automatically respent to a key
+    // that was created after it. Useful when you believe some keys have been compromised.
+    private volatile long vKeyRotationTimestamp;
 
     protected CoinSelector coinSelector = new DefaultCoinSelector();
 
@@ -273,6 +276,16 @@ public class Wallet extends BaseTaggableObject
     }
 
     /**
+     * @param params network parameters
+     * @param seed deterministic seed
+     * @param accountPath account path
+     * @return an instance of a wallet from a deterministic seed.
+     */
+    public static Wallet fromSeed(NetworkParameters params, DeterministicSeed seed, ImmutableList<ChildNumber> accountPath) {
+        return new Wallet(params, new KeyChainGroup(params, seed, accountPath));
+    }
+
+    /**
      * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given watching key.
      */
     public static Wallet fromWatchingKey(NetworkParameters params, DeterministicKey watchKey) {
@@ -296,6 +309,39 @@ public class Wallet extends BaseTaggableObject
      */
     public static Wallet fromSpendingKey(NetworkParameters params, DeterministicKey spendKey) {
         return new Wallet(params, new KeyChainGroup(params, spendKey, false));
+    }
+
+    /**
+     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given spending key.
+     * The key is specified in base58 notation and the creation time of the key. If you don't know the creation time,
+     * you can pass {@link DeterministicHierarchy#BIP32_STANDARDISATION_TIME_SECS}.
+     */
+    public static Wallet fromSpendingKeyB58(NetworkParameters params, String spendingKeyB58, long creationTimeSeconds) {
+        final DeterministicKey spendKey = DeterministicKey.deserializeB58(null, spendingKeyB58, params);
+        spendKey.setCreationTimeSeconds(creationTimeSeconds);
+        return fromSpendingKey(params, spendKey);
+    }
+
+    /**
+     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given spending key.
+     */
+    public static Wallet fromMasterKey(NetworkParameters params, DeterministicKey masterKey, ChildNumber accountNumber) {
+        DeterministicKey accountKey = HDKeyDerivation.deriveChildKey(masterKey, accountNumber);
+        accountKey = accountKey.dropParent();
+        accountKey.setCreationTimeSeconds(masterKey.getCreationTimeSeconds());
+        return new Wallet(params, new KeyChainGroup(params, accountKey, false));
+    }
+
+    /**
+     * Creates a wallet containing a given set of keys. All further keys will be derived from the oldest key.
+     */
+    public static Wallet fromKeys(NetworkParameters params, List<ECKey> keys) {
+        for (ECKey key : keys)
+            checkArgument(!(key instanceof DeterministicKey));
+
+        KeyChainGroup group = new KeyChainGroup(params);
+        group.importKeys(keys);
+        return new Wallet(params, group);
     }
 
     public Wallet(NetworkParameters params, KeyChainGroup keyChainGroup) {
@@ -378,6 +424,15 @@ public class Wallet extends BaseTaggableObject
                 signers.add(signer);
             else
                 throw new IllegalStateException("Signer instance is not ready to be added into Wallet: " + signer.getClass());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public List<TransactionSigner> getTransactionSigners() {
+        lock.lock();
+        try {
+            return ImmutableList.copyOf(signers);
         } finally {
             lock.unlock();
         }
@@ -497,12 +552,51 @@ public class Wallet extends BaseTaggableObject
     }
 
     /**
+     * Returns only the keys that have been issued by {@link #freshReceiveKey()}, {@link #freshReceiveAddress()},
+     * {@link #currentReceiveKey()} or {@link #currentReceiveAddress()}.
+     */
+    public List<ECKey> getIssuedReceiveKeys() {
+        keyChainGroupLock.lock();
+        try {
+            return keyChainGroup.getActiveKeyChain().getIssuedReceiveKeys();
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
+    /**
      * Returns a snapshot of the watched scripts. This view is not live.
      */
     public List<Script> getWatchedScripts() {
         keyChainGroupLock.lock();
         try {
             return new ArrayList<>(watchedScripts);
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
+    /**
+     * Removes the given key from the basicKeyChain. Be very careful with this - losing a private key <b>destroys the
+     * money associated with it</b>.
+     * @return Whether the key was removed or not.
+     */
+    public boolean removeKey(ECKey key) {
+        keyChainGroupLock.lock();
+        try {
+            return keyChainGroup.removeImportedKey(key);
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
+    /**
+     * Returns the number of keys in the key chain group, including lookahead keys.
+     */
+    public int getKeyChainGroupSize() {
+        keyChainGroupLock.lock();
+        try {
+            return keyChainGroup.numKeys();
         } finally {
             keyChainGroupLock.unlock();
         }
@@ -573,12 +667,43 @@ public class Wallet extends BaseTaggableObject
                 throw new IllegalArgumentException("Cannot import HD keys back into the wallet");
     }
 
+    /** Takes a list of keys and a password, then encrypts and imports them in one step using the current keycrypter. */
+    public int importKeysAndEncrypt(final List<ECKey> keys, CharSequence password) {
+        keyChainGroupLock.lock();
+        try {
+            checkNotNull(getKeyCrypter(), "Wallet is not encrypted");
+            return importKeysAndEncrypt(keys, getKeyCrypter().deriveKey(password));
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
     /** Takes a list of keys and an AES key, then encrypts and imports them in one step using the current keycrypter. */
     public int importKeysAndEncrypt(final List<ECKey> keys, KeyParameter aesKey) {
         keyChainGroupLock.lock();
         try {
             checkNoDeterministicKeys(keys);
             return keyChainGroup.importKeysAndEncrypt(keys, aesKey);
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
+    /**
+     * Add a pre-configured keychain to the wallet.  Useful for setting up a complex keychain,
+     * such as for a married wallet.  For example:
+     * {@code
+     * MarriedKeyChain chain = MarriedKeyChain.builder()
+     *     .random(new SecureRandom())
+     *     .followingKeys(followingKeys)
+     *     .threshold(2).build();
+     * wallet.addAndActivateHDChain(chain);
+     * }
+     */
+    public void addAndActivateHDChain(DeterministicKeyChain chain) {
+        keyChainGroupLock.lock();
+        try {
+            keyChainGroup.addAndActivateHDChain(chain);
         } finally {
             keyChainGroupLock.unlock();
         }
@@ -923,6 +1048,19 @@ public class Wallet extends BaseTaggableObject
             if (seed == null)
                 throw new ECKey.MissingPrivateKeyException();
             return seed;
+        } finally {
+            keyChainGroupLock.unlock();
+        }
+    }
+
+    /**
+     * Returns a key for the given HD path, assuming it's already been derived. You normally shouldn't use this:
+     * use currentReceiveKey/freshReceiveKey instead.
+     */
+    public DeterministicKey getKeyByPath(List<ChildNumber> path) {
+        keyChainGroupLock.lock();
+        try {
+            return keyChainGroup.getActiveKeyChain().getKeyByPath(path, false);
         } finally {
             keyChainGroupLock.unlock();
         }
@@ -4047,6 +4185,19 @@ public class Wallet extends BaseTaggableObject
     }
 
     /**
+     * Get the {@link UTXOProvider}.
+     * @return The UTXO provider.
+     */
+    @Nullable public UTXOProvider getUTXOProvider() {
+        lock.lock();
+        try {
+            return vUTXOProvider;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Set the {@link UTXOProvider}.
      *
      * <p>The wallet will query the provider for spendable candidates, i.e. outputs controlled exclusively
@@ -4490,6 +4641,40 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
+    /**
+     * Atomically adds extension or returns an existing extension if there is one with the same id already present.
+     */
+    public WalletExtension addOrGetExistingExtension(WalletExtension extension) {
+        String id = checkNotNull(extension).getWalletExtensionID();
+        lock.lock();
+        try {
+            WalletExtension previousExtension = extensions.get(id);
+            if (previousExtension != null)
+                return previousExtension;
+            extensions.put(id, extension);
+            saveNow();
+            return extension;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Either adds extension as a new extension or replaces the existing extension if one already exists with the same
+     * id. This also triggers wallet auto-saving, so may be useful even when called with the same extension as is
+     * already present.
+     */
+    public void addOrUpdateExtension(WalletExtension extension) {
+        String id = checkNotNull(extension).getWalletExtensionID();
+        lock.lock();
+        try {
+            extensions.put(id, extension);
+            saveNow();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /** Returns a snapshot of all registered extension objects. The extensions themselves are not copied. */
     public Map<String, WalletExtension> getExtensions() {
         lock.lock();
@@ -4642,6 +4827,33 @@ public class Wallet extends BaseTaggableObject
     private void addSuppliedInputs(Transaction tx, List<TransactionInput> originalInputs) {
         for (TransactionInput input : originalInputs)
             tx.addInput(new TransactionInput(params, tx, input.bitcoinSerialize()));
+    }
+
+    private int estimateBytesForSigning(CoinSelection selection) {
+        int size = 0;
+        for (TransactionOutput output : selection.gathered) {
+            try {
+                Script script = output.getScriptPubKey();
+                ECKey key = null;
+                Script redeemScript = null;
+                if (ScriptPattern.isPayToWitnessPubKeyHash(script)) {
+                    key = findKeyFromPubHash(ScriptPattern.extractHashFromPayToWitnessHash(script));
+                    checkNotNull(key, "Coin selection includes unspendable outputs");
+                } else if (ScriptPattern.isPayToPubKeyHash(script)) { // done
+                    key = findKeyFromPubHash(ScriptPattern.extractHashFromPayToPubKeyHash(script));
+                    checkNotNull(key, "Coin selection includes unspendable outputs");
+                } else if (ScriptPattern.isPayToScriptHash(script)) {
+                    redeemScript = findRedeemDataFromScriptHash(ScriptPattern.extractHashFromPayToScriptHash(script)).redeemScript;
+                    checkNotNull(redeemScript, "Coin selection includes unspendable outputs");
+                }
+                size += script.getNumberOfBytesRequiredToSpend(key, redeemScript);
+            } catch (ScriptException e) {
+                // If this happens it means an output script in a wallet tx could not be understood. That should never
+                // happen, if it does it means the wallet has got into an inconsistent state.
+                throw new IllegalStateException(e);
+            }
+        }
+        return size;
     }
 
     //endregion

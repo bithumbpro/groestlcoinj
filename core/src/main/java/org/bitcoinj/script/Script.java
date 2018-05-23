@@ -1544,6 +1544,13 @@ public class Script {
     }
 
     private static int executeMultiSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
+                                       int opCount, int lastCodeSepLocation, int opcode,
+                                       Set<VerifyFlag> verifyFlags) throws ScriptException {
+        return executeMultiSig(txContainingThis, index, script, stack, opCount, lastCodeSepLocation, opcode,
+                Coin.ZERO, false, verifyFlags);
+    }
+
+    private static int executeMultiSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
                                        int opCount, int lastCodeSepLocation, int opcode, Coin value, boolean segwit,
                                        Set<VerifyFlag> verifyFlags) throws ScriptException {
         final boolean requireCanonical = verifyFlags.contains(VerifyFlag.STRICTENC)

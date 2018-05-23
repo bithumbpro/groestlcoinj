@@ -41,17 +41,15 @@ public class StoredBlock {
     // bytes to represent this field, so 12 bytes should be plenty for now.
     public static final int CHAIN_WORK_BYTES = 12;
     public static final byte[] EMPTY_BYTES = new byte[CHAIN_WORK_BYTES];
-    public static final int COMPACT_SERIALIZED_SIZE = Block.HEADER_SIZE + CHAIN_WORK_BYTES + 4 + 4;  // for powHeight + height
+    public static final int COMPACT_SERIALIZED_SIZE = Block.HEADER_SIZE + CHAIN_WORK_BYTES + 4;  // for height
 
     private Block header;
     private BigInteger chainWork;
-    private int powHeight;
     private int height;
 
-    public StoredBlock(Block header, BigInteger chainWork, int powHeight, int height) {
+    public StoredBlock(Block header, BigInteger chainWork, int height) {
         this.header = header;
         this.chainWork = chainWork;
-        this.powHeight = powHeight;
         this.height = height;
     }
 
@@ -78,13 +76,6 @@ public class StoredBlock {
         return height;
     }
 
-    /**
-     * Position in the PoW sub-height.
-     */
-    public int getPoWHeight() {
-        return powHeight;
-    }
-
     /** Returns true if this objects chainWork is higher than the others. */
     public boolean moreWorkThan(StoredBlock other) {
         return chainWork.compareTo(other.chainWork) > 0;
@@ -95,12 +86,12 @@ public class StoredBlock {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         StoredBlock other = (StoredBlock) o;
-        return header.equals(other.header) && chainWork.equals(other.chainWork) && powHeight == other.powHeight && height == other.height;
+        return header.equals(other.header) && chainWork.equals(other.chainWork) && height == other.height;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(header, chainWork, powHeight, height);
+        return Objects.hashCode(header, chainWork, height);
     }
 
     /**
@@ -110,8 +101,8 @@ public class StoredBlock {
         // Stored blocks track total work done in this chain, because the canonical chain is the one that represents
         // the largest amount of work done not the tallest.
         BigInteger chainWork = this.chainWork.add(block.getWork());
-        int powHeight = block.isProofOfStake() ? this.powHeight : this.powHeight + 1;
-        return new StoredBlock(block, chainWork, powHeight, this.height + 1);
+        int height = this.height + 1;
+        return new StoredBlock(block, chainWork, height);
     }
 
     /**
@@ -133,7 +124,6 @@ public class StoredBlock {
             buffer.put(EMPTY_BYTES, 0, CHAIN_WORK_BYTES - chainWorkBytes.length);
         }
         buffer.put(chainWorkBytes);
-        buffer.putInt(getPoWHeight());
         buffer.putInt(getHeight());
         // Using unsafeBitcoinSerialize here can give us direct access to the same bytes we read off the wire,
         // avoiding serialization round-trips.
@@ -146,16 +136,15 @@ public class StoredBlock {
         byte[] chainWorkBytes = new byte[StoredBlock.CHAIN_WORK_BYTES];
         buffer.get(chainWorkBytes);
         BigInteger chainWork = new BigInteger(1, chainWorkBytes);
-        int powHeight = buffer.getInt();  // +4 bytes
         int height = buffer.getInt();  // +4 bytes
         byte[] header = new byte[Block.HEADER_SIZE + 1];    // Extra byte for the 00 transactions length.
         buffer.get(header, 0, Block.HEADER_SIZE);
-        return new StoredBlock(params.getDefaultSerializer().makeBlock(header), chainWork, powHeight, height);
+        return new StoredBlock(params.getDefaultSerializer().makeBlock(header), chainWork, height);
     }
 
     @Override
     public String toString() {
-        return String.format(Locale.US, "Block %s at powHeight %d and height %d: %s",
-                getHeader().getHashAsString(), getPoWHeight(), getHeight(), getHeader().toString());
+        return String.format(Locale.US, "Block %s at height %d: %s",
+                getHeader().getHashAsString(), getHeight(), getHeader().toString());
     }
 }

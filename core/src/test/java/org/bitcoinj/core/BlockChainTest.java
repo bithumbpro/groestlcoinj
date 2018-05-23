@@ -129,8 +129,8 @@ public class BlockChainTest {
         int height = 1;
         // Quick check that we can actually receive coins.
         Transaction tx1 = createFakeTx(UNITTEST,
-                COIN,
-                SegwitAddress.fromKey(UNITTEST, wallet.currentReceiveKey()));
+                                       COIN,
+                                       SegwitAddress.fromKey(UNITTEST, wallet.currentReceiveKey()));
         Block b1 = createFakeBlock(blockStore, height, tx1).block;
         chain.add(b1);
         assertTrue(wallet.getBalance().signum() > 0);
@@ -149,6 +149,74 @@ public class BlockChainTest {
         // Add in the middle block.
         assertTrue(chain.add(b2));
         assertEquals(chain.getChainHead().getHeader(), b3.cloneAsHeader());
+    }
+
+    @Test
+    public void difficultyTransitions() throws Exception {
+        // Add a bunch of blocks in a loop until we reach a difficulty transition point. The unit test params have an
+        // artificially shortened period.
+        Block prev = UNITTEST.getGenesisBlock();
+        Utils.setMockClock(System.currentTimeMillis()/1000);
+        for (int height = 0; height < UNITTEST.getInterval() - 1; height++) {
+            Block newBlock = prev.createNextBlock(coinbaseTo, 1, Utils.currentTimeSeconds(), height);
+            assertTrue(chain.add(newBlock));
+            prev = newBlock;
+            // The fake chain should seem to be "fast" for the purposes of difficulty calculations.
+            Utils.rollMockClock(2);
+        }
+        // Now add another block that has no difficulty adjustment, it should be rejected.
+        try {
+            chain.add(prev.createNextBlock(coinbaseTo, 1, Utils.currentTimeSeconds(), UNITTEST.getInterval()));
+            fail();
+        } catch (VerificationException e) {
+        }
+        // Create a new block with the right difficulty target given our blistering speed relative to the huge amount
+        // of time it's supposed to take (set in the unit test network parameters).
+        Block b = prev.createNextBlock(coinbaseTo, 1, Utils.currentTimeSeconds(), UNITTEST.getInterval() + 1);
+        b.setDifficultyTarget(0x201fFFFFL);
+        b.solve();
+        assertTrue(chain.add(b));
+        // Successfully traversed a difficulty transition period.
+    }
+
+    @Test
+    public void badDifficulty() throws Exception {
+        assertTrue(testNetChain.add(getBlock1()));
+        Block b2 = getBlock2();
+        assertTrue(testNetChain.add(b2));
+        Block bad = new Block(TESTNET, Block.BLOCK_VERSION_GENESIS);
+        // Merkle root can be anything here, doesn't matter.
+        bad.setMerkleRoot(Sha256Hash.wrap("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        // Nonce was just some number that made the hash < difficulty limit set below, it can be anything.
+        bad.setNonce(140548933);
+        bad.setTime(1279242649);
+        bad.setPrevBlockHash(b2.getHash());
+        // We're going to make this block so easy 50% of solutions will pass, and check it gets rejected for having a
+        // bad difficulty target. Unfortunately the encoding mechanism means we cannot make one that accepts all
+        // solutions.
+        bad.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
+        try {
+            testNetChain.add(bad);
+            // The difficulty target above should be rejected on the grounds of being easier than the networks
+            // allowable difficulty.
+            fail();
+        } catch (VerificationException e) {
+            assertTrue(e.getMessage(), e.getCause().getMessage().contains("Difficulty target is bad"));
+        }
+
+        // Accept any level of difficulty now.
+        BigInteger oldVal = TESTNET.getMaxTarget();
+        TESTNET.setMaxTarget(new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16));
+        try {
+            testNetChain.add(bad);
+            // We should not get here as the difficulty target should not be changing at this point.
+            fail();
+        } catch (VerificationException e) {
+            assertTrue(e.getMessage(), e.getCause().getMessage().contains("Unexpected change in difficulty"));
+        }
+        TESTNET.setMaxTarget(oldVal);
+
+        // TODO: Test difficulty change is not out of range when a transition period becomes valid.
     }
 
     /**

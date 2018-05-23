@@ -17,8 +17,6 @@
 
 package org.bitcoinj.store;
 
-import com.google.common.base.Charsets;
-import com.google.common.io.Resources;
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.BlockChain;
@@ -65,7 +63,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
-import java.net.URL;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
@@ -217,12 +214,8 @@ public class WalletProtobufSerializerTest {
         assertTrue(lastSeenBlockHash.isEmpty());
 
         // Create a block.
-        URL resource = BlockTest.class.getResource("block1325549_testnet.txt");
-        String text = Resources.toString(resource, Charsets.UTF_8);
-
-        byte[] block1325549Bytes = Utils.HEX.decode(text);
-        Block block = UNITTEST.getDefaultSerializer().makeBlock(block1325549Bytes);
-
+        Block block = UNITTEST.getDefaultSerializer()
+                .makeBlock(ByteStreams.toByteArray(BlockTest.class.getResourceAsStream("block_testnet700000.dat")));
         Sha256Hash blockHash = block.getHash();
         wallet.setLastBlockSeenHash(blockHash);
         wallet.setLastBlockSeenHeight(1);

@@ -59,16 +59,16 @@ public class Block extends Message {
     private static final Logger log = LoggerFactory.getLogger(Block.class);
 
     /** How many bytes are required to represent a block header WITHOUT the trailing 00 length byte. */
-    public static final int HEADER_SIZE = 84;
-    public static final int LEGACY_HEADER_SIZE = 80;
-    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60;
+    public static final int HEADER_SIZE = 80;
+
+    static final long ALLOWED_TIME_DRIFT = 2 * 60 * 60; // Same value as Bitcoin Core.
 
     /**
      * A constant shared by the entire network: how large in bytes a block is allowed to be. One day we may have to
      * upgrade everyone to change this, so Bitcoin can continue to grow. For now it exists as an anti-DoS measure to
      * avoid somebody creating a titanically huge but valid block and forcing everyone to download/store it forever.
      */
-    public static final int MAX_BLOCK_SIZE = 1000 * 1000;
+    public static final int MAX_BLOCK_SIZE = 1 * 1000 * 1000;
 
     /**
      * Segwit blocks have a block weight defined as three times base size (block without witness data) plus total size
@@ -111,7 +111,6 @@ public class Block extends Message {
     private long time;
     private long difficultyTarget; // "nBits"
     private long nonce;
-    private long flags;
 
     // TODO: Get rid of all the direct accesses to this field. It's a long-since unnecessary holdover from the Dalvik days.
     /** If null, it means this object holds only the headers. */
@@ -136,6 +135,7 @@ public class Block extends Message {
         difficultyTarget = 0x1d07fff8L;
         time = System.currentTimeMillis() / 1000;
         prevBlockHash = Sha256Hash.ZERO_HASH;
+
         length = HEADER_SIZE;
     }
 
@@ -146,6 +146,20 @@ public class Block extends Message {
     @Deprecated
     public Block(NetworkParameters params, byte[] payloadBytes) throws ProtocolException {
         super(params, payloadBytes, 0, params.getDefaultSerializer(), payloadBytes.length);
+    }
+
+    /**
+     * Construct a block object from the Bitcoin wire format.
+     * @param params NetworkParameters object.
+     * @param payloadBytes the payload to extract the block from.
+     * @param serializer the serializer to use for this message.
+     * @param length The length of message if known.  Usually this is provided when deserializing of the wire
+     * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
+     * @throws ProtocolException
+     */
+    public Block(NetworkParameters params, byte[] payloadBytes, MessageSerializer serializer, int length)
+            throws ProtocolException {
+        super(params, payloadBytes, 0, serializer, length);
     }
 
     /**
@@ -163,8 +177,61 @@ public class Block extends Message {
         super(params, payloadBytes, offset, serializer, length);
     }
 
-    public boolean isProofOfStake() {
-        return (flags & 1) == 1;
+    /**
+     * Construct a block object from the Bitcoin wire format. Used in the case of a block
+     * contained within another message (i.e. for AuxPoW header).
+     *
+     * @param params NetworkParameters object.
+     * @param payloadBytes Bitcoin protocol formatted byte array containing message content.
+     * @param offset The location of the first payload byte within the array.
+     * @param parent The message element which contains this block, maybe null for no parent.
+     * @param serializer the serializer to use for this block.
+     * @param length The length of message if known.  Usually this is provided when deserializing of the wire
+     * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
+     * @throws ProtocolException
+     */
+    public Block(NetworkParameters params, byte[] payloadBytes, int offset, @Nullable Message parent, MessageSerializer serializer, int length)
+            throws ProtocolException {
+        // TODO: Keep the parent
+        super(params, payloadBytes, offset, serializer, length);
+    }
+
+    /**
+     * Construct a block initialized with all the given fields.
+     * @param params Which network the block is for.
+     * @param version This should usually be set to 1 or 2, depending on if the height is in the coinbase input.
+     * @param prevBlockHash Reference to previous block in the chain or {@link Sha256Hash#ZERO_HASH} if genesis.
+     * @param merkleRoot The root of the merkle tree formed by the transactions.
+     * @param time UNIX time when the block was mined.
+     * @param difficultyTarget Number which this block hashes lower than.
+     * @param nonce Arbitrary number to make the block hash lower than the target.
+     * @param transactions List of transactions including the coinbase.
+     */
+    public Block(NetworkParameters params, long version, Sha256Hash prevBlockHash, Sha256Hash merkleRoot, long time,
+                 long difficultyTarget, long nonce, List<Transaction> transactions) {
+        super(params);
+        this.version = version;
+        this.prevBlockHash = prevBlockHash;
+        this.merkleRoot = merkleRoot;
+        this.time = time;
+        this.difficultyTarget = difficultyTarget;
+        this.nonce = nonce;
+        this.transactions = new LinkedList<>();
+        this.transactions.addAll(transactions);
+    }
+
+
+    /**
+     * <p>A utility method that calculates how much new Bitcoin would be created by the block at the given height.
+     * The inflation of Bitcoin is predictable and drops roughly every 4 years (210,000 blocks). At the dawn of
+     * the system it was 50 coins per block, in late 2012 it went to 25 coins per block, and so on. The size of
+     * a coinbase transaction is inflation plus fees.</p>
+     *
+     * <p>The half-life is controlled by {@link NetworkParameters#getSubsidyDecreaseBlockCount()}.
+     * </p>
+     */
+    public Coin getBlockInflation(int height) {
+        return FIFTY_COINS.shiftRight(height / params.getSubsidyDecreaseBlockCount());
     }
 
     /**
@@ -184,7 +251,7 @@ public class Block extends Message {
         }
 
         int numTransactions = (int) readVarInt();
-        optimalEncodingMessageSize += VarInt.sizeOf(numTransactions) + (isProofOfStake() ? 1 : 0);
+        optimalEncodingMessageSize += VarInt.sizeOf(numTransactions);
         transactions = new ArrayList<>(numTransactions);
         for (int i = 0; i < numTransactions; i++) {
             Transaction tx = new Transaction(params, payload, cursor, this, serializer, UNKNOWN_LENGTH);
@@ -207,9 +274,10 @@ public class Block extends Message {
         time = readUint32();
         difficultyTarget = readUint32();
         nonce = readUint32();
-        flags = readUint32();
-        hash = calculateHash();
+        hash = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(payload, offset, cursor - offset));
         headerBytesValid = serializer.isParseRetainMode();
+
+        // transactions
         parseTransactions(offset + HEADER_SIZE);
         length = cursor - offset;
     }
@@ -222,15 +290,6 @@ public class Block extends Message {
     }
 
     // default for testing
-    private void writeHeaderBase(OutputStream stream) throws IOException {
-        Utils.uint32ToByteStreamLE(version, stream);
-        stream.write(prevBlockHash.getReversedBytes());
-        stream.write(getMerkleRoot().getReversedBytes());
-        Utils.uint32ToByteStreamLE(time, stream);
-        Utils.uint32ToByteStreamLE(difficultyTarget, stream);
-        Utils.uint32ToByteStreamLE(nonce, stream);
-    }
-
     void writeHeader(OutputStream stream) throws IOException {
         // try for cached write first
         if (headerBytesValid && payload != null && payload.length >= offset + HEADER_SIZE) {
@@ -238,8 +297,12 @@ public class Block extends Message {
             return;
         }
         // fall back to manual write
-        writeHeaderBase(stream);
-        Utils.uint32ToByteStreamLE(flags, stream);
+        Utils.uint32ToByteStreamLE(version, stream);
+        stream.write(prevBlockHash.getReversedBytes());
+        stream.write(getMerkleRoot().getReversedBytes());
+        Utils.uint32ToByteStreamLE(time, stream);
+        Utils.uint32ToByteStreamLE(difficultyTarget, stream);
+        Utils.uint32ToByteStreamLE(nonce, stream);
     }
 
     private void writeTransactions(OutputStream stream) throws IOException {
@@ -354,26 +417,9 @@ public class Block extends Message {
      */
     private Sha256Hash calculateHash() {
         try {
-            ByteArrayOutputStream bos;
-            byte[] result;
-
-            if (isProofOfStake()) {
-                bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
-                writeHeaderBase(bos);
-
-                bos.write((int) (0xFF & flags));
-                bos.write(0);
-                bos.write(0);
-                bos.write(0);
-
-                result = bos.toByteArray();
-            } else {
-                bos = new UnsafeByteArrayOutputStream(LEGACY_HEADER_SIZE);
-                writeHeader(bos);
-                result = Arrays.copyOfRange(bos.toByteArray(), 0, LEGACY_HEADER_SIZE);
-            }
-
-            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(result));
+            ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(HEADER_SIZE);
+            writeHeader(bos);
+            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bos.toByteArray()));
         } catch (IOException e) {
             throw new RuntimeException(e); // Cannot happen.
         }
@@ -428,7 +474,6 @@ public class Block extends Message {
     /** Copy the block without transactions into the provided empty block. */
     protected final void copyBitcoinHeaderTo(final Block block) {
         block.nonce = nonce;
-        block.flags = flags;
         block.prevBlockHash = prevBlockHash;
         block.merkleRoot = getMerkleRoot();
         block.version = version;
@@ -458,7 +503,6 @@ public class Block extends Message {
         s.append("   time: ").append(time).append(" (").append(Utils.dateTimeFormat(time * 1000)).append(")\n");
         s.append("   difficulty target (nBits): ").append(difficultyTarget).append("\n");
         s.append("   nonce: ").append(nonce).append("\n");
-        s.append("   isProofOfStake: ").append(isProofOfStake()).append("\n");
         if (transactions != null && transactions.size() > 0) {
             s.append("   with ").append(transactions.size()).append(" transaction(s):\n");
             for (Transaction tx : transactions) {
@@ -496,7 +540,7 @@ public class Block extends Message {
      */
     public BigInteger getDifficultyTargetAsInteger() throws VerificationException {
         BigInteger target = Utils.decodeCompactBits(difficultyTarget);
-        if (target.signum() <= 0 || target.compareTo(params.maxTargetStart) > 0)
+        if (target.signum() <= 0 || target.compareTo(params.maxTarget) > 0)
             throw new VerificationException("Difficulty target is bad: " + target.toString());
         return target;
     }
@@ -511,14 +555,9 @@ public class Block extends Message {
         //
         // To prevent this attack from being possible, elsewhere we check that the difficultyTarget
         // field is of the right value. This requires us to have the preceeding blocks.
-
-        if (isProofOfStake()) {
-            return true;
-        }
-
         BigInteger target = getDifficultyTargetAsInteger();
-        BigInteger h = getHash().toBigInteger();
 
+        BigInteger h = getHash().toBigInteger();
         if (h.compareTo(target) > 0) {
             // Proof of work check failed!
             if (throwException)
