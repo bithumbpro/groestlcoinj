@@ -210,8 +210,6 @@ public class Wallet extends BaseTaggableObject
     // in receive() via Transaction.setBlockAppearance(). As the BlockChain always calls notifyNewBestBlock even if
     // it sent transactions to the wallet, without this we'd double count.
     private HashSet<Sha256Hash> ignoreNextNewBlock;
-    // Whether or not to ignore pending transactions that are considered risky by the configured risk analyzer.
-    private boolean acceptRiskyTransactions;
     // Object that performs risk analysis of pending transactions. We might reject transactions that seem like
     // a high risk of being a double spending attack.
     private RiskAnalysis.Analyzer riskAnalyzer = DefaultRiskAnalysis.FACTORY;
@@ -303,47 +301,6 @@ public class Wallet extends BaseTaggableObject
         return fromWatchingKey(params, watchKey);
     }
 
-    /**
-     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given spending key.
-     * This wallet can also spend.
-     */
-    public static Wallet fromSpendingKey(NetworkParameters params, DeterministicKey spendKey) {
-        return new Wallet(params, new KeyChainGroup(params, spendKey, false));
-    }
-
-    /**
-     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given spending key.
-     * The key is specified in base58 notation and the creation time of the key. If you don't know the creation time,
-     * you can pass {@link DeterministicHierarchy#BIP32_STANDARDISATION_TIME_SECS}.
-     */
-    public static Wallet fromSpendingKeyB58(NetworkParameters params, String spendingKeyB58, long creationTimeSeconds) {
-        final DeterministicKey spendKey = DeterministicKey.deserializeB58(null, spendingKeyB58, params);
-        spendKey.setCreationTimeSeconds(creationTimeSeconds);
-        return fromSpendingKey(params, spendKey);
-    }
-
-    /**
-     * Creates a wallet that tracks payments to and from the HD key hierarchy rooted by the given spending key.
-     */
-    public static Wallet fromMasterKey(NetworkParameters params, DeterministicKey masterKey, ChildNumber accountNumber) {
-        DeterministicKey accountKey = HDKeyDerivation.deriveChildKey(masterKey, accountNumber);
-        accountKey = accountKey.dropParent();
-        accountKey.setCreationTimeSeconds(masterKey.getCreationTimeSeconds());
-        return new Wallet(params, new KeyChainGroup(params, accountKey, false));
-    }
-
-    /**
-     * Creates a wallet containing a given set of keys. All further keys will be derived from the oldest key.
-     */
-    public static Wallet fromKeys(NetworkParameters params, List<ECKey> keys) {
-        for (ECKey key : keys)
-            checkArgument(!(key instanceof DeterministicKey));
-
-        KeyChainGroup group = new KeyChainGroup(params);
-        group.importKeys(keys);
-        return new Wallet(params, group);
-    }
-
     public Wallet(NetworkParameters params, KeyChainGroup keyChainGroup) {
         this(Context.getOrCreate(params), keyChainGroup);
     }
@@ -397,7 +354,6 @@ public class Wallet extends BaseTaggableObject
                 }
             }
         };
-        acceptRiskyTransactions = false;
     }
 
     public NetworkParameters getNetworkParameters() {
@@ -1288,40 +1244,8 @@ public class Wallet extends BaseTaggableObject
     }
 
     /**
-     * <p>Whether or not the wallet will ignore pending transactions that fail the selected
-     * {@link RiskAnalysis}. By default, if a transaction is considered risky then it won't enter the wallet
-     * and won't trigger any event listeners. If you set this property to true, then all transactions will
-     * be allowed in regardless of risk. For example, the {@link DefaultRiskAnalysis} checks for non-finality of
-     * transactions.</p>
-     *
-     * <p>Note that this property is not serialized. You have to set it each time a Wallet object is constructed,
-     * even if it's loaded from a protocol buffer.</p>
-     */
-    public void setAcceptRiskyTransactions(boolean acceptRiskyTransactions) {
-        lock.lock();
-        try {
-            this.acceptRiskyTransactions = acceptRiskyTransactions;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * See {@link Wallet#setAcceptRiskyTransactions(boolean)} for an explanation of this property.
-     */
-    public boolean isAcceptRiskyTransactions() {
-        lock.lock();
-        try {
-            return acceptRiskyTransactions;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
      * Sets the {@link RiskAnalysis} implementation to use for deciding whether received pending transactions are risky
-     * or not. If the analyzer says a transaction is risky, by default it will be dropped. You can customize this
-     * behaviour with {@link #setAcceptRiskyTransactions(boolean)}.
+     * or not. If the analyzer says a transaction is risky, by default it will be dropped.
      */
     public void setRiskAnalyzer(RiskAnalysis.Analyzer analyzer) {
         lock.lock();
@@ -1638,12 +1562,6 @@ public class Wallet extends BaseTaggableObject
             // race conditions where receivePending may be being called in parallel.
             if (!overrideIsRelevant && !isPendingTransactionRelevant(tx))
                 return;
-            if (isTransactionRisky(tx, dependencies) && !acceptRiskyTransactions) {
-                // isTransactionRisky already logged the reason.
-                riskDropped.put(tx.getHash(), tx);
-                log.warn("There are now {} risk dropped transactions being kept in memory", riskDropped.size());
-                return;
-            }
             Coin valueSentToMe = tx.getValueSentToMe(this);
             Coin valueSentFromMe = tx.getValueSentFromMe(this);
             if (log.isInfoEnabled()) {
@@ -1667,8 +1585,7 @@ public class Wallet extends BaseTaggableObject
 
     /**
      * Given a transaction and an optional list of dependencies (recursive/flattened), returns true if the given
-     * transaction would be rejected by the analyzer, or false otherwise. The result of this call is independent
-     * of the value of {@link #isAcceptRiskyTransactions()}. Risky transactions yield a logged warning. If you
+     * transaction would be rejected by the analyzer, or false otherwise. Risky transactions yield a logged warning. If you
      * want to know the reason why a transaction is risky, create an instance of the {@link RiskAnalysis} yourself
      * using the factory returned by {@link #getRiskAnalyzer()} and use it directly.
      */
@@ -2943,52 +2860,6 @@ public class Wallet extends BaseTaggableObject
             return candidates;
         } finally {
             keyChainGroupLock.unlock();
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Clean up the wallet. Currently, it only removes risky pending transaction from the wallet and only if their
-     * outputs have not been spent.
-     */
-    public void cleanup() {
-        lock.lock();
-        try {
-            boolean dirty = false;
-            for (Iterator<Transaction> i = pending.values().iterator(); i.hasNext();) {
-                Transaction tx = i.next();
-                if (isTransactionRisky(tx, null) && !acceptRiskyTransactions) {
-                    log.debug("Found risky transaction {} in wallet during cleanup.", tx.getHashAsString());
-                    if (!tx.isAnyOutputSpent()) {
-                        // Sync myUnspents with the change.
-                        for (TransactionInput input : tx.getInputs()) {
-                            TransactionOutput output = input.getConnectedOutput();
-                            if (output == null) continue;
-                            if (output.isMineOrWatched(this))
-                                checkState(myUnspents.add(output));
-                            input.disconnect();
-                        }
-                        for (TransactionOutput output : tx.getOutputs())
-                            myUnspents.remove(output);
-
-                        i.remove();
-                        transactions.remove(tx.getHash());
-                        dirty = true;
-                        log.info("Removed transaction {} from pending pool during cleanup.", tx.getHashAsString());
-                    } else {
-                        log.info(
-                                "Cannot remove transaction {} from pending pool during cleanup, as it's already spent partially.",
-                                tx.getHashAsString());
-                    }
-                }
-            }
-            if (dirty) {
-                isConsistentOrThrow();
-                saveLater();
-                if (log.isInfoEnabled())
-                    log.info("Estimated balance is now: {}", getBalance(BalanceType.ESTIMATED).toFriendlyString());
-            }
-        } finally {
             lock.unlock();
         }
     }
