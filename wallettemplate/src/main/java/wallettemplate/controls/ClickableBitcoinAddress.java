@@ -14,8 +14,8 @@
 
 package wallettemplate.controls;
 
-import org.bitcoinj.core.Address;
-import org.bitcoinj.uri.BitcoinURI;
+import org.groestlcoinj.core.Address;
+import org.groestlcoinj.uri.BitcoinURI;
 import de.jensd.fx.fontawesome.AwesomeDude;
 import de.jensd.fx.fontawesome.AwesomeIcon;
 import javafx.beans.binding.StringExpression;

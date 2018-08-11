@@ -15,25 +15,25 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.crypto.*;
-import org.bitcoinj.net.discovery.DnsDiscovery;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.protocols.payments.PaymentProtocol;
-import org.bitcoinj.protocols.payments.PaymentProtocolException;
-import org.bitcoinj.protocols.payments.PaymentSession;
-import org.bitcoinj.script.ScriptBuilder;
-import org.bitcoinj.store.*;
-import org.bitcoinj.uri.BitcoinURI;
-import org.bitcoinj.uri.BitcoinURIParseException;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.wallet.DeterministicSeed;
-import org.bitcoinj.wallet.DeterministicUpgradeRequiredException;
-import org.bitcoinj.wallet.DeterministicUpgradeRequiresPassword;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.crypto.*;
+import org.groestlcoinj.net.discovery.DnsDiscovery;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.params.RegTestParams;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.protocols.payments.PaymentProtocol;
+import org.groestlcoinj.protocols.payments.PaymentProtocolException;
+import org.groestlcoinj.protocols.payments.PaymentSession;
+import org.groestlcoinj.script.ScriptBuilder;
+import org.groestlcoinj.store.*;
+import org.groestlcoinj.uri.BitcoinURI;
+import org.groestlcoinj.uri.BitcoinURIParseException;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.wallet.DeterministicSeed;
+import org.groestlcoinj.wallet.DeterministicUpgradeRequiredException;
+import org.groestlcoinj.wallet.DeterministicUpgradeRequiresPassword;
 import com.google.common.base.Charsets;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -47,19 +47,19 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import joptsimple.util.DateConverter;
 
-import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
-import org.bitcoinj.core.listeners.DownloadProgressTracker;
-import org.bitcoinj.wallet.MarriedKeyChain;
-import org.bitcoinj.wallet.Protos;
-import org.bitcoinj.wallet.SendRequest;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.WalletExtension;
-import org.bitcoinj.wallet.WalletProtobufSerializer;
-import org.bitcoinj.wallet.Wallet.BalanceType;
-import org.bitcoinj.wallet.listeners.WalletChangeEventListener;
-import org.bitcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
-import org.bitcoinj.wallet.listeners.WalletCoinsSentEventListener;
-import org.bitcoinj.wallet.listeners.WalletReorganizeEventListener;
+import org.groestlcoinj.core.listeners.BlocksDownloadedEventListener;
+import org.groestlcoinj.core.listeners.DownloadProgressTracker;
+import org.groestlcoinj.wallet.MarriedKeyChain;
+import org.groestlcoinj.wallet.Protos;
+import org.groestlcoinj.wallet.SendRequest;
+import org.groestlcoinj.wallet.Wallet;
+import org.groestlcoinj.wallet.WalletExtension;
+import org.groestlcoinj.wallet.WalletProtobufSerializer;
+import org.groestlcoinj.wallet.Wallet.BalanceType;
+import org.groestlcoinj.wallet.listeners.WalletChangeEventListener;
+import org.groestlcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
+import org.groestlcoinj.wallet.listeners.WalletCoinsSentEventListener;
+import org.groestlcoinj.wallet.listeners.WalletReorganizeEventListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
@@ -83,7 +83,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 
-import static org.bitcoinj.core.Coin.parseCoin;
+import static org.groestlcoinj.core.Coin.parseCoin;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -107,7 +107,7 @@ public class WalletTool {
     private static File chainFileName;
     private static ValidationMode mode;
     private static String password;
-    private static org.bitcoin.protocols.payments.Protos.PaymentRequest paymentRequest;
+    private static org.groestlcoin.protocols.payments.Protos.PaymentRequest paymentRequest;
     private static OptionSpec<Integer> lookaheadSize;
 
     public static class Condition {
@@ -1032,7 +1032,7 @@ public class WalletTool {
                 System.exit(1);
             }
             try {
-                paymentRequest = org.bitcoin.protocols.payments.Protos.PaymentRequest.newBuilder().mergeFrom(stream).build();
+                paymentRequest = org.groestlcoin.protocols.payments.Protos.PaymentRequest.newBuilder().mergeFrom(stream).build();
             } catch(IOException e) {
                 System.err.println("Failed to parse payment request from file " + e.getMessage());
                 System.exit(1);

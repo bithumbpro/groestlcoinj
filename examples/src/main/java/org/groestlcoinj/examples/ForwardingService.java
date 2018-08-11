@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.crypto.KeyCrypterException;
-import org.bitcoinj.kits.WalletAppKit;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.crypto.KeyCrypterException;
+import org.groestlcoinj.kits.WalletAppKit;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.params.RegTestParams;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.wallet.Wallet;
+import org.groestlcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
 
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;

@@ -12,16 +12,16 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.core.listeners.PeerConnectedEventListener;
-import org.bitcoinj.core.listeners.PeerDisconnectedEventListener;
-import org.bitcoinj.kits.WalletAppKit;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.wallet.SendRequest;
-import org.bitcoinj.wallet.Wallet;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.core.listeners.PeerConnectedEventListener;
+import org.groestlcoinj.core.listeners.PeerDisconnectedEventListener;
+import org.groestlcoinj.kits.WalletAppKit;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.wallet.SendRequest;
+import org.groestlcoinj.wallet.Wallet;
 
 import java.io.File;
 

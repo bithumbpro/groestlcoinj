@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import org.bitcoinj.core.listeners.*;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.net.discovery.DnsDiscovery;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.wallet.DefaultRiskAnalysis;
-import org.bitcoinj.wallet.RiskAnalysis.Result;
+import org.groestlcoinj.core.listeners.*;
+import org.groestlcoinj.core.NetworkParameters;
+import org.groestlcoinj.core.Peer;
+import org.groestlcoinj.core.PeerGroup;
+import org.groestlcoinj.core.Transaction;
+import org.groestlcoinj.net.discovery.DnsDiscovery;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.wallet.DefaultRiskAnalysis;
+import org.groestlcoinj.wallet.RiskAnalysis.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

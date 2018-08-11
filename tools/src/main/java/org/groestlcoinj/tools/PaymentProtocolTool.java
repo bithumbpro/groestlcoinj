@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
-import org.bitcoinj.crypto.TrustStoreLoader;
-import org.bitcoinj.protocols.payments.PaymentProtocol;
-import org.bitcoinj.protocols.payments.PaymentProtocolException;
-import org.bitcoinj.protocols.payments.PaymentSession;
-import org.bitcoinj.uri.BitcoinURI;
-import org.bitcoinj.uri.BitcoinURIParseException;
-import org.bitcoin.protocols.payments.Protos;
+import org.groestlcoinj.crypto.TrustStoreLoader;
+import org.groestlcoinj.protocols.payments.PaymentProtocol;
+import org.groestlcoinj.protocols.payments.PaymentProtocolException;
+import org.groestlcoinj.protocols.payments.PaymentSession;
+import org.groestlcoinj.uri.BitcoinURI;
+import org.groestlcoinj.uri.BitcoinURIParseException;
+import org.groestlcoin.protocols.payments.Protos;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;

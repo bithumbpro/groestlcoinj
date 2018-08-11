@@ -12,16 +12,16 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import org.bitcoinj.core.*;
-import org.bitcoinj.kits.WalletAppKit;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.Wallet.BalanceType;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.kits.WalletAppKit;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.wallet.Wallet;
+import org.groestlcoinj.wallet.Wallet.BalanceType;
 
 import java.io.File;
 

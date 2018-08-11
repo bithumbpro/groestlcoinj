@@ -61,8 +61,8 @@
       <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
     </repository-->
           <repository>
-              <id>bintray-hashengineering-groestlcoin-grs</id>
-              <name>hashengineering-groestlcoin-grs</name>
+              <id>bintray-hashengineering-groestlcoin</id>
+              <name>hashengineering-groestlcoin</name>
               <url>https://api.bintray.com/maven/hashengineering/groestlcoin/org.groestlcoinj-grs/;publish=1</url>
           </repository>
   </distributionManagement>

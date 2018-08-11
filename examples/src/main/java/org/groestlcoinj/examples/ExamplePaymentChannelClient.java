@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-import org.bitcoinj.core.*;
-import org.bitcoinj.kits.WalletAppKit;
-import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.protocols.channels.PaymentChannelClient;
-import org.bitcoinj.protocols.channels.PaymentChannelClientConnection;
-import org.bitcoinj.protocols.channels.StoredPaymentChannelClientStates;
-import org.bitcoinj.protocols.channels.ValueOutOfRangeException;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.utils.Threading;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.WalletExtension;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.kits.WalletAppKit;
+import org.groestlcoinj.params.RegTestParams;
+import org.groestlcoinj.protocols.channels.PaymentChannelClient;
+import org.groestlcoinj.protocols.channels.PaymentChannelClientConnection;
+import org.groestlcoinj.protocols.channels.StoredPaymentChannelClientStates;
+import org.groestlcoinj.protocols.channels.ValueOutOfRangeException;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.utils.Threading;
+import org.groestlcoinj.wallet.Wallet;
+import org.groestlcoinj.wallet.WalletExtension;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.FutureCallback;
@@ -46,7 +46,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 
-import static org.bitcoinj.core.Coin.CENT;
+import static org.groestlcoinj.core.Coin.CENT;
 
 /**
  * Simple client that connects to the given host, opens a channel, and pays one cent.

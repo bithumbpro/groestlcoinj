@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.store.BlockStore;
-import org.bitcoinj.store.MemoryBlockStore;
-import org.bitcoinj.wallet.Wallet;
-import org.bitcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.store.BlockStore;
+import org.groestlcoinj.store.MemoryBlockStore;
+import org.groestlcoinj.wallet.Wallet;
+import org.groestlcoinj.wallet.listeners.WalletCoinsReceivedEventListener;
 
 import java.io.File;
 

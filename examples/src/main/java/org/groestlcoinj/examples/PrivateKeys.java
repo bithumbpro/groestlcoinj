@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.store.MemoryBlockStore;
-import org.bitcoinj.wallet.Wallet;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.store.MemoryBlockStore;
+import org.groestlcoinj.wallet.Wallet;
 
 import java.math.BigInteger;
 import java.net.InetAddress;

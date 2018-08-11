@@ -12,18 +12,18 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
-import org.bitcoinj.core.*;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.store.*;
-import org.bitcoinj.utils.BlockFileLoader;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.store.*;
+import org.groestlcoinj.utils.BlockFileLoader;
 import com.google.common.base.Preconditions;
 
 import java.io.File;
 
-/** Very thin wrapper around {@link org.bitcoinj.utils.BlockFileLoader} */
+/** Very thin wrapper around {@link org.groestlcoinj.utils.BlockFileLoader} */
 public class BlockImporter {
     public static void main(String[] args) throws BlockStoreException, VerificationException, PrunedException {
         System.out.println("USAGE: BlockImporter (prod|test) (H2|Disk|MemFull|Mem|SPV) [blockStore]");

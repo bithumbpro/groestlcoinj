@@ -12,19 +12,19 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
-import org.bitcoinj.core.listeners.PreMessageReceivedEventListener;
-import org.bitcoinj.core.*;
-import org.bitcoinj.kits.WalletAppKit;
-import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.utils.Threading;
-import org.bitcoinj.wallet.Wallet;
+import org.groestlcoinj.core.listeners.PreMessageReceivedEventListener;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.kits.WalletAppKit;
+import org.groestlcoinj.params.RegTestParams;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.utils.Threading;
+import org.groestlcoinj.wallet.Wallet;
 
 import java.io.File;
 
-import static org.bitcoinj.core.Coin.*;
+import static org.groestlcoinj.core.Coin.*;
 
 /**
  * This is a little test app that waits for a coin on a local regtest node, then  generates two transactions that double

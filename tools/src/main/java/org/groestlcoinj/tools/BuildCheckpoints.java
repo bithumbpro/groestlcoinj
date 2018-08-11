@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.tools;
+package org.groestlcoinj.tools;
 
-import org.bitcoinj.core.listeners.NewBestBlockListener;
-import org.bitcoinj.core.*;
-import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.params.RegTestParams;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.store.BlockStore;
-import org.bitcoinj.store.MemoryBlockStore;
-import org.bitcoinj.utils.BriefLogFormatter;
-import org.bitcoinj.utils.Threading;
+import org.groestlcoinj.core.listeners.NewBestBlockListener;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.params.MainNetParams;
+import org.groestlcoinj.params.RegTestParams;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.store.BlockStore;
+import org.groestlcoinj.store.MemoryBlockStore;
+import org.groestlcoinj.utils.BriefLogFormatter;
+import org.groestlcoinj.utils.Threading;
 import com.google.common.base.Charsets;
 import com.google.common.io.Resources;
 import joptsimple.OptionParser;

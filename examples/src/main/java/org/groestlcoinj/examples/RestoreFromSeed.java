@@ -12,15 +12,15 @@
  * limitations under the License.
  */
 
-package org.bitcoinj.examples;
+package org.groestlcoinj.examples;
 
-import org.bitcoinj.core.listeners.DownloadProgressTracker;
-import org.bitcoinj.core.*;
-import org.bitcoinj.net.discovery.DnsDiscovery;
-import org.bitcoinj.params.TestNet3Params;
-import org.bitcoinj.store.SPVBlockStore;
-import org.bitcoinj.wallet.DeterministicSeed;
-import org.bitcoinj.wallet.Wallet;
+import org.groestlcoinj.core.listeners.DownloadProgressTracker;
+import org.groestlcoinj.core.*;
+import org.groestlcoinj.net.discovery.DnsDiscovery;
+import org.groestlcoinj.params.TestNet3Params;
+import org.groestlcoinj.store.SPVBlockStore;
+import org.groestlcoinj.wallet.DeterministicSeed;
+import org.groestlcoinj.wallet.Wallet;
 
 import java.io.File;
 
