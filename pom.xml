@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.groestlcoinj</groupId>
+  <groupId>org.groestlcoinj-grs</groupId>
   <artifactId>groestlcoinj-parent</artifactId>
   <version>0.14.4</version>
   <packaging>pom</packaging>
@@ -61,9 +61,9 @@
       <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
     </repository-->
           <repository>
-              <id>bintray-hashengineering-groestlcoin</id>
-              <name>hashengineering-groestlcoin</name>
-              <url>https://api.bintray.com/maven/hashengineering/groestlcoin/org.groestlcoinj/;publish=1</url>
+              <id>bintray-hashengineering-groestlcoin-grs</id>
+              <name>hashengineering-groestlcoin-grs</name>
+              <url>https://api.bintray.com/maven/hashengineering/groestlcoin/org.groestlcoinj-grs/;publish=1</url>
           </repository>
   </distributionManagement>
 
