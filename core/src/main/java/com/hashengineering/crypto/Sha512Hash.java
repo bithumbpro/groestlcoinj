@@ -16,8 +16,8 @@
 
 package com.hashengineering.crypto;
 
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.Utils;
+import org.groestlcoinj.core.Sha256Hash;
+import org.groestlcoinj.core.Utils;
 import com.google.common.io.ByteStreams;
 import org.spongycastle.util.encoders.Hex;
 

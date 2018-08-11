@@ -1,9 +1,8 @@
 package com.hashengineering.crypto.difficulty;
 
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.store.BlockStore;
-import org.bitcoinj.store.BlockStoreException;
+import org.groestlcoinj.core.StoredBlock;
+import org.groestlcoinj.store.BlockStore;
+import org.groestlcoinj.store.BlockStoreException;
 
 /**
  * Created by Hash Engineering Solutions on 6/4/14.
