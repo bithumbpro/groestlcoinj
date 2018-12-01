@@ -79,19 +79,13 @@ public class MainNetParams extends AbstractBitcoinNetParams {
                 "dnsseed.bluematt.me",          // Matt Corallo
                 "dnsseed.bitcoin.dashjr.org",   // Luke Dashjr
                 "seed.bitcoinstats.com",        // Chris Decker
-                "seed.bitnodes.io",             // Addy Yeow
-                "bitseed.xf2.org",              // Jeff Garzik
                 "seed.bitcoin.jonasschnelli.ch",// Jonas Schnelli
-                "bitcoin.bloqseeds.net",        // Bloq
-                "seed.ob1.io",                  // OpenBazaar
+                "seed.btc.petertodd.org",       // Peter Todd
+                "seed.bitcoin.sprovoost.nl",    // Sjors Provoost
+                "seed.bitnodes.io",             // Addy Yeow
         };
-        httpSeeds = new HttpDiscovery.Details[] {
-                // Andreas Schildbach
-                new HttpDiscovery.Details(
-                        ECKey.fromPublicOnly(Utils.HEX.decode("0238746c59d46d5408bf8b1d0af5740fe1a6e1703fcb56b2953f0b965c740d256f")),
-                        URI.create("http://httpseed.bitcoin.schildbach.de/peers")
-                )
-        };
+
+        httpSeeds = null;
 
         addrSeeds = new int[] {
                 0x1ddb1032, 0x6242ce40, 0x52d6a445, 0x2dd7a445, 0x8a53cd47, 0x73263750, 0xda23c257, 0xecd4ed57,
