@@ -1,5 +1,6 @@
 /*
  * Copyright 2015 Ross Nicoll.
+ * Copyright 2019 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,19 +25,23 @@ import java.util.EnumSet;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import org.bitcoinj.core.LegacyAddress;
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.ScriptException;
+import org.bitcoinj.core.SignatureDecodeException;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.core.Utils;
+import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
 import org.bitcoinj.script.ScriptChunk;
+import org.bitcoinj.script.ScriptException;
+
 import static org.bitcoinj.script.ScriptOpCodes.getOpCodeName;
 import org.bitcoinj.signers.LocalTransactionSigner;
 import org.bitcoinj.signers.TransactionSigner.ProposedTransaction;
@@ -52,19 +57,20 @@ import org.bitcoinj.wallet.RedeemData;
 public class GenerateLowSTests {
     public static final BigInteger HIGH_S_DIFFERENCE = new BigInteger("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
 
-    public static void main(final String[] argv) throws NoSuchAlgorithmException, IOException {
+    public static void main(final String[] argv)
+            throws NoSuchAlgorithmException, IOException, VerificationException, SignatureDecodeException {
         final NetworkParameters params = new MainNetParams();
         final LocalTransactionSigner signer = new LocalTransactionSigner();
         final SecureRandom secureRandom = SecureRandom.getInstanceStrong();
         final ECKey key = new ECKey(secureRandom);
         final KeyBag bag = new KeyBag() {
             @Override
-            public ECKey findKeyFromPubHash(byte[] pubkeyHash) {
+            public ECKey findKeyFromPubKeyHash(byte[] pubkeyHash, Script.ScriptType scriptType) {
                 return key;
             }
 
             @Override
-            public ECKey findKeyFromPubKey(byte[] pubkey) {
+            public ECKey findKeyFromPubKey(byte[] pubKey) {
                 return key;
             }
 
@@ -80,11 +86,11 @@ public class GenerateLowSTests {
 
         final Transaction outputTransaction = new Transaction(params);
         final Transaction inputTransaction = new Transaction(params);
-        final TransactionOutput output = new TransactionOutput(params, inputTransaction, Coin.ZERO, key.toAddress(params));
+        final TransactionOutput output = new TransactionOutput(params, inputTransaction, Coin.ZERO, LegacyAddress.fromKey(params, key));
 
         inputTransaction.addOutput(output);
         outputTransaction.addInput(output);
-        outputTransaction.addOutput(Coin.ZERO, new ECKey(secureRandom).toAddress(params));
+        outputTransaction.addOutput(Coin.ZERO, LegacyAddress.fromKey(params, new ECKey(secureRandom)));
 
         addOutputs(outputTransaction, bag);
 
@@ -103,7 +109,7 @@ public class GenerateLowSTests {
         // First output a conventional low-S transaction with the LOW_S flag, for the tx_valid.json set
         System.out.println("[\"A transaction with a low-S signature.\"],");
         System.out.println("[[[\""
-            + inputTransaction.getHashAsString() + "\", "
+            + inputTransaction.getTxId() + "\", "
             + output.getIndex() + ", \""
             + scriptToString(output.getScriptPubKey()) + "\"]],\n"
             + "\"" + Utils.HEX.encode(proposedTransaction.partialTx.unsafeBitcoinSerialize()) + "\", \""
@@ -118,7 +124,7 @@ public class GenerateLowSTests {
         // A high-S transaction without the LOW_S flag, for the tx_valid.json set
         System.out.println("[\"A transaction with a high-S signature.\"],");
         System.out.println("[[[\""
-            + inputTransaction.getHashAsString() + "\", "
+            + inputTransaction.getTxId() + "\", "
             + output.getIndex() + ", \""
             + scriptToString(output.getScriptPubKey()) + "\"]],\n"
             + "\"" + Utils.HEX.encode(proposedTransaction.partialTx.unsafeBitcoinSerialize()) + "\", \""
@@ -127,7 +133,7 @@ public class GenerateLowSTests {
         // Lastly a conventional high-S transaction with the LOW_S flag, for the tx_invalid.json set
         System.out.println("[\"A transaction with a high-S signature.\"],");
         System.out.println("[[[\""
-            + inputTransaction.getHashAsString() + "\", "
+            + inputTransaction.getTxId() + "\", "
             + output.getIndex() + ", \""
             + scriptToString(output.getScriptPubKey()) + "\"]],\n"
             + "\"" + Utils.HEX.encode(proposedTransaction.partialTx.unsafeBitcoinSerialize()) + "\", \""

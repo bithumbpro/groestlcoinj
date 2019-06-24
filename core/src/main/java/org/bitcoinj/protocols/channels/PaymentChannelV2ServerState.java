@@ -21,6 +21,7 @@ import com.google.common.collect.MultimapBuilder;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.TransactionSignature;
@@ -30,7 +31,9 @@ import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.bouncycastle.crypto.params.KeyParameter;
 
+import javax.annotation.Nullable;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Locale;
@@ -116,7 +119,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
 
     /**
      * Creates a P2SH script outputting to the client and server pubkeys
-     * @return
+     * @return a P2SH script.
      */
     @Override
     protected Script createOutputScript() {
@@ -132,8 +135,9 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
     }
 
     // Signs the first input of the transaction which must spend the multisig contract.
-    private void signP2SHInput(Transaction tx, Transaction.SigHash hashType, boolean anyoneCanPay) {
-        TransactionSignature signature = tx.calculateSignature(0, serverKey, createP2SHRedeemScript(), hashType, anyoneCanPay);
+    private void signP2SHInput(Transaction tx, Transaction.SigHash hashType,
+                               boolean anyoneCanPay, @Nullable KeyParameter userKey) {
+        TransactionSignature signature = tx.calculateSignature(0, serverKey, userKey, createP2SHRedeemScript(), hashType, anyoneCanPay);
         byte[] mySig = signature.encodeToBitcoin();
         Script scriptSig = ScriptBuilder.createCLTVPaymentChannelP2SHInput(bestValueSignature, mySig, createP2SHRedeemScript());
         tx.getInput(0).setScriptSig(scriptSig);
@@ -142,7 +146,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
     final SettableFuture<Transaction> closedFuture = SettableFuture.create();
 
     @Override
-    public synchronized ListenableFuture<Transaction> close() throws InsufficientMoneyException {
+    public synchronized ListenableFuture<Transaction> close(@Nullable KeyParameter userKey) throws InsufficientMoneyException {
         if (storedServerChannel != null) {
             StoredServerChannel temp = storedServerChannel;
             storedServerChannel = null;
@@ -172,7 +176,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
             // know how to sign. Note that this signature does actually have to be valid, so we can't use a dummy
             // signature to save time, because otherwise completeTx will try to re-sign it to make it valid and then
             // die. We could probably add features to the SendRequest API to make this a bit more efficient.
-            signP2SHInput(tx, Transaction.SigHash.NONE, true);
+            signP2SHInput(tx, Transaction.SigHash.NONE, true, userKey);
             // Let wallet handle adding additional inputs/fee as necessary.
             req.shuffleOutputs = false;
             req.missingSigsMode = Wallet.MissingSigsMode.USE_DUMMY_SIG;
@@ -185,7 +189,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
                 throw new InsufficientMoneyException(feePaidForPayment.subtract(bestValueToMe), msg);
             }
             // Now really sign the multisig input.
-            signP2SHInput(tx, Transaction.SigHash.ALL, false);
+            signP2SHInput(tx, Transaction.SigHash.ALL, false, userKey);
             // Some checks that shouldn't be necessary but it can't hurt to check.
             tx.verify();  // Sanity check syntax.
             for (TransactionInput input : tx.getInputs())
@@ -202,7 +206,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
         ListenableFuture<Transaction> future = broadcaster.broadcastTransaction(tx).future();
         Futures.addCallback(future, new FutureCallback<Transaction>() {
             @Override public void onSuccess(Transaction transaction) {
-                log.info("TX {} propagated, channel successfully closed.", transaction.getHash());
+                log.info("TX {} propagated, channel successfully closed.", transaction.getTxId());
                 stateMachine.transition(State.CLOSED);
                 closedFuture.set(transaction);
             }
@@ -212,7 +216,7 @@ public class PaymentChannelV2ServerState extends PaymentChannelServerState {
                 stateMachine.transition(State.ERROR);
                 closedFuture.setException(throwable);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return closedFuture;
     }
 }

@@ -18,7 +18,6 @@
 package org.bitcoinj.core;
 
 import com.google.common.base.Objects;
-import org.spongycastle.util.encoders.Hex;
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.StoredBlock;
 import org.bitcoinj.core.VerificationException;
@@ -51,7 +50,7 @@ public abstract class NetworkParameters {
      * The alert signing key originally owned by Satoshi, and now passed on to Gavin along with a few others.
      */
 
-    public static final byte[] SATOSHI_KEY = Hex.decode(CoinDefinition.SATOSHI_KEY); //Hex.decode("04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284");
+    public static final byte[] SATOSHI_KEY = Utils.HEX.decode(CoinDefinition.SATOSHI_KEY); //Hex.decode("04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284");
 
     /** The string returned by getId() for the main, production network where people trade things. */
     public static final String ID_MAINNET = CoinDefinition.ID_MAINNET; //"org.bitcoin.production";
@@ -79,11 +78,14 @@ public abstract class NetworkParameters {
     protected int addressHeader;
     protected int p2shHeader;
     protected int dumpedPrivateKeyHeader;
+    protected String segwitAddressHrp;
     protected int interval;
     protected int targetTimespan;
     protected byte[] alertSigningKey;
-    protected int bip32HeaderPub;
-    protected int bip32HeaderPriv;
+    protected int bip32HeaderP2PKHpub;
+    protected int bip32HeaderP2PKHpriv;
+    protected int bip32HeaderP2WPKHpub;
+    protected int bip32HeaderP2WPKHpriv;
 
     /** Used to check majorities for block version upgrade */
     protected int majorityEnforceBlockUpgrade;
@@ -102,12 +104,11 @@ public abstract class NetworkParameters {
     protected int spendableCoinbaseDepth;
     protected int subsidyDecreaseBlockCount;
     
-    protected int[] acceptableAddressCodes;
     protected String[] dnsSeeds;
     protected int[] addrSeeds;
     protected HttpDiscovery.Details[] httpSeeds = {};
-    protected Map<Integer, Sha256Hash> checkpoints = new HashMap<Integer, Sha256Hash>();
-    protected transient MessageSerializer defaultSerializer = null;
+    protected Map<Integer, Sha256Hash> checkpoints = new HashMap<>();
+    protected volatile transient MessageSerializer defaultSerializer = null;
 
     protected NetworkParameters() {
         alertSigningKey = SATOSHI_KEY;
@@ -122,11 +123,11 @@ public abstract class NetworkParameters {
             //
 
             //   coin dependent
-            byte[] bytes = Hex.decode(CoinDefinition.genesisTxInBytes);
+            byte[] bytes = Utils.HEX.decode(CoinDefinition.genesisTxInBytes);
             //byte[] bytes = Hex.decode("04ffff001d0104294469676974616c636f696e2c20412043757272656e637920666f722061204469676974616c20416765");
             t.addInput(new TransactionInput(n, t, bytes));
             ByteArrayOutputStream scriptPubKeyBytes = new ByteArrayOutputStream();
-            Script.writeBytes(scriptPubKeyBytes, Hex.decode(CoinDefinition.genesisTxOutBytes));
+            Script.writeBytes(scriptPubKeyBytes, Utils.HEX.decode(CoinDefinition.genesisTxOutBytes));
                     //("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f"));
             scriptPubKeyBytes.write(ScriptOpCodes.OP_CHECKSIG);
             t.addOutput(new TransactionOutput(n, t, Coin.valueOf(CoinDefinition.genesisBlockValue, 0), scriptPubKeyBytes.toByteArray()));
@@ -163,42 +164,6 @@ public abstract class NetworkParameters {
 
     public static final Coin MAX_MONEY = COIN.multiply(CoinDefinition.MAX_COINS);
 
-
-    /** Alias for TestNet3Params.get(), use that instead. */
-    @Deprecated
-    public static NetworkParameters testNet() {
-        return TestNet3Params.get();
-    }
-
-    /** Alias for TestNet2Params.get(), use that instead. */
-    @Deprecated
-    public static NetworkParameters testNet2() {
-        return TestNet2Params.get();
-    }
-
-    /** Alias for TestNet3Params.get(), use that instead. */
-    @Deprecated
-    public static NetworkParameters testNet3() {
-        return TestNet3Params.get();
-    }
-
-    /** Alias for MainNetParams.get(), use that instead */
-    @Deprecated
-    public static NetworkParameters prodNet() {
-        return MainNetParams.get();
-    }
-
-    /** Returns a testnet params modified to allow any difficulty target. */
-    @Deprecated
-    public static NetworkParameters unitTests() {
-        return UnitTestParams.get();
-    }
-
-    /** Returns a standard regression test params (similar to unitTests) */
-    @Deprecated
-    public static NetworkParameters regTests() {
-        return RegTestParams.get();
-    }
 
     /**
      * A Java package style string acting as unique ID for these parameters
@@ -294,7 +259,7 @@ public abstract class NetworkParameters {
         return addrSeeds;
     }
 
-    /** Returns discovery objects for seeds implementing the Cartographer protocol. See {@link org.bitcoinj.net.discovery.HttpDiscovery} for more info. */
+    /** Returns discovery objects for seeds implementing the Cartographer protocol. See {@link HttpDiscovery} for more info. */
     public HttpDiscovery.Details[] getHttpSeeds() {
         return httpSeeds;
     }
@@ -302,7 +267,7 @@ public abstract class NetworkParameters {
     /**
      * <p>Genesis block for this chain.</p>
      *
-     * <p>The first block in every chain is a well known constant shared between all Bitcoin implemenetations. For a
+     * <p>The first block in every chain is a well known constant shared between all Bitcoin implementations. For a
      * block to be valid, it must be eventually possible to work backwards to the genesis block by following the
      * prevBlockHash pointers in the block headers.</p>
      *
@@ -325,7 +290,7 @@ public abstract class NetworkParameters {
     }
 
     /**
-     * First byte of a base58 encoded address. See {@link org.bitcoinj.core.Address}. This is the same as acceptableAddressCodes[0] and
+     * First byte of a base58 encoded address. See {@link LegacyAddress}. This is the same as acceptableAddressCodes[0] and
      * is the one used for "normal" addresses. Other types of address may be encountered with version codes found in
      * the acceptableAddressCodes array.
      */
@@ -340,9 +305,14 @@ public abstract class NetworkParameters {
         return p2shHeader;
     }
 
-    /** First byte of a base58 encoded dumped private key. See {@link org.bitcoinj.core.DumpedPrivateKey}. */
+    /** First byte of a base58 encoded dumped private key. See {@link DumpedPrivateKey}. */
     public int getDumpedPrivateKeyHeader() {
         return dumpedPrivateKeyHeader;
+    }
+
+    /** Human readable part of bech32 encoded segwit address. */
+    public String getSegwitAddressHrp() {
+        return segwitAddressHrp;
     }
 
     /**
@@ -355,22 +325,13 @@ public abstract class NetworkParameters {
     }
 
     /**
-     * The version codes that prefix addresses which are acceptable on this network. Although Satoshi intended these to
-     * be used for "versioning", in fact they are today used to discriminate what kind of data is contained in the
-     * address and to prevent accidentally sending coins across chains which would destroy them.
-     */
-    public int[] getAcceptableAddressCodes() {
-        return acceptableAddressCodes;
-    }
-
-    /**
      * If we are running in testnet-in-a-box mode, we allow connections to nodes with 0 non-genesis blocks.
      */
     public boolean allowEmptyPeerChain() {
         return true;
     }
 
-    /** How many blocks pass between difficulty adjustment periods. Bitcoin standardises this to be 2015. */
+    /** How many blocks pass between difficulty adjustment periods. Bitcoin standardises this to be 2016. */
     public int getInterval() {
         return interval;
     }
@@ -381,23 +342,32 @@ public abstract class NetworkParameters {
     }
 
     /**
-     * The key used to sign {@link org.bitcoinj.core.AlertMessage}s. You can use {@link org.bitcoinj.core.ECKey#verify(byte[], byte[], byte[])} to verify
+     * The key used to sign {@link AlertMessage}s. You can use {@link ECKey#verify(byte[], byte[], byte[])} to verify
      * signatures using it.
      */
     public byte[] getAlertSigningKey() {
         return alertSigningKey;
     }
 
-    /** Returns the 4 byte header for BIP32 (HD) wallet - public key part. */
-    public int getBip32HeaderPub() {
-        return bip32HeaderPub;
+    /** Returns the 4 byte header for BIP32 wallet P2PKH - public key part. */
+    public int getBip32HeaderP2PKHpub() {
+        return bip32HeaderP2PKHpub;
     }
 
-    /** Returns the 4 byte header for BIP32 (HD) wallet - private key part. */
-    public int getBip32HeaderPriv() {
-        return bip32HeaderPriv;
+    /** Returns the 4 byte header for BIP32 wallet P2PKH - private key part. */
+    public int getBip32HeaderP2PKHpriv() {
+        return bip32HeaderP2PKHpriv;
     }
 
+    /** Returns the 4 byte header for BIP32 wallet P2WPKH - public key part. */
+    public int getBip32HeaderP2WPKHpub() {
+        return bip32HeaderP2WPKHpub;
+    }
+
+    /** Returns the 4 byte header for BIP32 wallet P2WPKH - private key part. */
+    public int getBip32HeaderP2WPKHpriv() {
+        return bip32HeaderP2WPKHpriv;
+    }
     /**
      * Returns the number of coins that will be produced in total, on this
      * network. Where not applicable, a very large number of coins is returned
@@ -406,7 +376,7 @@ public abstract class NetworkParameters {
     public abstract Coin getMaxMoney();
 
     /**
-     * Any standard (ie pay-to-address) output smaller than this value will
+     * Any standard (ie P2PKH) output smaller than this value will
      * most likely be rejected by the network.
      */
     public abstract Coin getMinNonDustOutput();
@@ -423,14 +393,14 @@ public abstract class NetworkParameters {
 
     /**
      * Returns whether this network has a maximum number of coins (finite supply) or
-     * not. Always returns true for Bitcoin, but exists to be overriden for other
+     * not. Always returns true for Bitcoin, but exists to be overridden for other
      * networks.
      */
     public abstract boolean hasMaxMoney();
 
     /**
      * Return the default serializer for this network. This is a shared serializer.
-     * @return 
+     * @return the default serializer for this network.
      */
     public final MessageSerializer getDefaultSerializer() {
         // Construct a default serializer if we don't have one
@@ -456,7 +426,7 @@ public abstract class NetworkParameters {
     public abstract BitcoinSerializer getSerializer(boolean parseRetain);
 
     /**
-     * The number of blocks in the last {@link getMajorityWindow()} blocks
+     * The number of blocks in the last {@link #getMajorityWindow()} blocks
      * at which to trigger a notice to the user to upgrade their client, where
      * the client does not understand those blocks.
      */
@@ -465,7 +435,7 @@ public abstract class NetworkParameters {
     }
 
     /**
-     * The number of blocks in the last {@link getMajorityWindow()} blocks
+     * The number of blocks in the last {@link #getMajorityWindow()} blocks
      * at which to enforce the requirement that all new blocks are of the
      * newer type (i.e. outdated blocks are rejected).
      */
@@ -534,7 +504,9 @@ public abstract class NetworkParameters {
     public static enum ProtocolVersion {
         MINIMUM(70000),
         PONG(60001),
-        BLOOM_FILTER(70000),
+        BLOOM_FILTER(70000), // BIP37
+        BLOOM_FILTER_BIP111(70011), // BIP111
+        WITNESS_VERSION(70012),
         CURRENT(CoinDefinition.PROTOCOL_VERSION);
 
         private final int bitcoinProtocol;

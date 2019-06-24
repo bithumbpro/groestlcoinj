@@ -1,6 +1,6 @@
 /*
- * Copyright 2013 The bitcoinj developers.
- *
+ * Copyright by the original author or authors.
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -24,12 +24,13 @@ import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.core.Utils;
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.script.ScriptBuilder;
+import org.bouncycastle.crypto.params.KeyParameter;
 
-import java.security.SecureRandom;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,7 @@ import static com.google.common.collect.Lists.newArrayList;
  * specifies how many signatures required to spend transactions for this married keychain. This value should not exceed
  * total number of keys involved (one followed key plus number of following keys), otherwise IllegalArgumentException
  * will be thrown.</p>
- * <p>IMPORTANT: As of Bitcoin Core 0.9 all multisig transactions which require more than 3 public keys are non-standard
+ * <p>IMPORTANT: As of Bitcoin Core 0.9 all bare (non-P2SH) multisig transactions which require more than 3 public keys are non-standard
  * and such spends won't be processed by peers with default settings, essentially making such transactions almost
  * nonspendable</p>
  * <p>This method will throw an IllegalStateException, if the keychain is already married or already has leaf keys
@@ -57,7 +58,7 @@ import static com.google.common.collect.Lists.newArrayList;
 public class MarriedKeyChain extends DeterministicKeyChain {
     // The map holds P2SH redeem script and corresponding ECKeys issued by this KeyChainGroup (including lookahead)
     // mapped to redeem script hashes.
-    private LinkedHashMap<ByteString, RedeemData> marriedKeysRedeemData = new LinkedHashMap<ByteString, RedeemData>();
+    private LinkedHashMap<ByteString, RedeemData> marriedKeysRedeemData = new LinkedHashMap<>();
 
     private List<DeterministicKeyChain> followingKeyChains;
 
@@ -80,7 +81,7 @@ public class MarriedKeyChain extends DeterministicKeyChain {
         }
 
         /**
-         * Threshold, or {@code (followingKeys.size() + 1) / 2 + 1)} (majority) if unspecified.</p>
+         * <p>Threshold, or {@code (followingKeys.size() + 1) / 2 + 1)} (majority) if unspecified.</p>
          * <p>IMPORTANT: As of Bitcoin Core 0.9 all multisig transactions which require more than 3 public keys are non-standard
          * and such spends won't be processed by peers with default settings, essentially making such transactions almost
          * nonspendable</p>
@@ -92,22 +93,25 @@ public class MarriedKeyChain extends DeterministicKeyChain {
 
         @Override
         public MarriedKeyChain build() {
-            checkState(random != null || entropy != null || seed != null || watchingKey!= null, "Must provide either entropy or random or seed or watchingKey");
             checkNotNull(followingKeys, "followingKeys must be provided");
-            MarriedKeyChain chain;
+
             if (threshold == 0)
                 threshold = (followingKeys.size() + 1) / 2 + 1;
-            if (random != null) {
-                chain = new MarriedKeyChain(random, bits, getPassphrase(), seedCreationTimeSecs);
-            } else if (entropy != null) {
-                chain = new MarriedKeyChain(entropy, getPassphrase(), seedCreationTimeSecs);
-            } else if (seed != null) {
-                seed.setCreationTimeSeconds(seedCreationTimeSecs);
-                chain = new MarriedKeyChain(seed);
-            } else {
-                watchingKey.setCreationTimeSeconds(seedCreationTimeSecs);
-                chain = new MarriedKeyChain(watchingKey);
-            }
+            if (accountPath == null)
+                accountPath = ACCOUNT_ZERO_PATH;
+
+            MarriedKeyChain chain;
+            if (random != null)
+                chain = new MarriedKeyChain(new DeterministicSeed(random, bits, getPassphrase()), null, outputScriptType, accountPath);
+            else if (entropy != null)
+                chain = new MarriedKeyChain(new DeterministicSeed(entropy, getPassphrase(), creationTimeSecs), null,
+                        outputScriptType, accountPath);
+            else if (seed != null)
+                chain = new MarriedKeyChain(seed, null, outputScriptType, accountPath);
+            else if (watchingKey != null)
+                chain = new MarriedKeyChain(watchingKey, outputScriptType);
+            else
+                throw new IllegalStateException();
             chain.addFollowingAccountKeys(followingKeys, threshold);
             return chain;
         }
@@ -117,26 +121,20 @@ public class MarriedKeyChain extends DeterministicKeyChain {
         return new Builder();
     }
 
-    // Protobuf deserialization constructors
-    MarriedKeyChain(DeterministicKey accountKey) {
-        super(accountKey, false);
+    /**
+     * This constructor is not stable across releases! If you need a stable API, use {@link #builder()} to use a
+     * {@link Builder}.
+     */
+    protected MarriedKeyChain(DeterministicKey accountKey, Script.ScriptType outputScriptType) {
+        super(accountKey, false, true, outputScriptType);
     }
 
-    MarriedKeyChain(DeterministicSeed seed, KeyCrypter crypter) {
-        super(seed, crypter);
-    }
-
-    // Builder constructors
-    private MarriedKeyChain(SecureRandom random, int bits, String passphrase, long seedCreationTimeSecs) {
-        super(random, bits, passphrase, seedCreationTimeSecs);
-    }
-
-    private MarriedKeyChain(byte[] entropy, String passphrase, long seedCreationTimeSecs) {
-        super(entropy, passphrase, seedCreationTimeSecs);
-    }
-
-    private MarriedKeyChain(DeterministicSeed seed) {
-        super(seed);
+    /**
+     * This constructor is not stable across releases! If you need a stable API, use {@link #builder()} to use a
+     * {@link Builder}.
+     */
+    protected MarriedKeyChain(DeterministicSeed seed, KeyCrypter crypter, Script.ScriptType outputScriptType, ImmutableList<ChildNumber> accountPath) {
+        super(seed, crypter, outputScriptType, accountPath);
     }
 
     void setFollowingKeyChains(List<DeterministicKeyChain> followingKeyChains) {
@@ -191,7 +189,8 @@ public class MarriedKeyChain extends DeterministicKeyChain {
 
         for (DeterministicKey key : followingAccountKeys) {
             checkArgument(key.getPath().size() == getAccountPath().size(), "Following keys have to be account keys");
-            DeterministicKeyChain chain = DeterministicKeyChain.watchAndFollow(key);
+            DeterministicKeyChain chain = DeterministicKeyChain.builder().watchAndFollow(key)
+                    .outputScriptType(getOutputScriptType()).build();
             if (lookaheadSize >= 0)
                 chain.setLookaheadSize(lookaheadSize);
             if (lookaheadThreshold >= 0)
@@ -234,13 +233,14 @@ public class MarriedKeyChain extends DeterministicKeyChain {
     }
 
     @Override
-    protected void formatAddresses(boolean includePrivateKeys, NetworkParameters params, StringBuilder builder2) {
+    protected void formatAddresses(boolean includeLookahead, boolean includePrivateKeys, @Nullable KeyParameter aesKey,
+            NetworkParameters params, StringBuilder builder) {
         for (DeterministicKeyChain followingChain : followingKeyChains)
-            builder2.append("Following chain:  ").append(followingChain.getWatchingKey().serializePubB58(params))
+            builder.append("Following chain:  ").append(followingChain.getWatchingKey().serializePubB58(params))
                     .append('\n');
-        builder2.append('\n');
+        builder.append('\n');
         for (RedeemData redeemData : marriedKeysRedeemData.values())
-            formatScript(ScriptBuilder.createP2SHOutputScript(redeemData.redeemScript), builder2, params);
+            formatScript(ScriptBuilder.createP2SHOutputScript(redeemData.redeemScript), builder, params);
     }
 
     private void formatScript(Script script, StringBuilder builder, NetworkParameters params) {

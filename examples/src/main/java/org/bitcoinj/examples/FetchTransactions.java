@@ -40,7 +40,7 @@ public class FetchTransactions {
         BlockChain chain = new BlockChain(params, blockStore);
         PeerGroup peerGroup = new PeerGroup(params, chain);
         peerGroup.start();
-        peerGroup.addAddress(new PeerAddress(InetAddress.getLocalHost(), params.getPort()));
+        peerGroup.addAddress(new PeerAddress(params, InetAddress.getLocalHost()));
         peerGroup.waitForPeers(1).get();
         Peer peer = peerGroup.getConnectedPeers().get(0);
 
@@ -53,7 +53,7 @@ public class FetchTransactions {
         System.out.println("Waiting for node to send us the dependencies ...");
         List<Transaction> deps = peer.downloadDependencies(tx).get();
         for (Transaction dep : deps) {
-            System.out.println("Got dependency " + dep.getHashAsString());
+            System.out.println("Got dependency " + dep.getTxId());
         }
 
         System.out.println("Done.");

@@ -20,6 +20,7 @@ package org.bitcoinj.protocols.channels;
 import org.bitcoinj.core.*;
 import org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason;
 import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.SendRequest;
 import org.bitcoinj.wallet.Wallet;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -30,7 +31,7 @@ import com.google.protobuf.ByteString;
 import net.jcip.annotations.GuardedBy;
 import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.LoggerFactory;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
 import java.util.concurrent.locks.ReentrantLock;
@@ -56,6 +57,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(PaymentChannelClient.class);
 
     protected final ReentrantLock lock = Threading.lock("channelclient");
+    protected final ClientChannelProperties clientChannelProperties;
 
     // Used to track the negotiated version number
     @GuardedBy("lock") private int majorVersion;
@@ -167,36 +169,8 @@ public class PaymentChannelClient implements IPaymentChannelClient {
      * @param conn A callback listener which represents the connection to the server (forwards messages we generate to
      *             the server)
      */
-    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId,
-                                ClientConnection conn) {
-        this(wallet,myKey,maxValue,serverId, conn, VersionSelector.VERSION_2_ALLOW_1);
-    }
-
-    /**
-     * Constructs a new channel manager which waits for {@link PaymentChannelClient#connectionOpen()} before acting.
-     * A default time window of {@link #DEFAULT_TIME_WINDOW} will be used.
-     *
-     * @param wallet The wallet which will be paid from, and where completed transactions will be committed.
-     *               Must already have a {@link StoredPaymentChannelClientStates} object in its extensions set.
-     * @param myKey A freshly generated keypair used for the multisig contract and refund output.
-     * @param maxValue The maximum value the server is allowed to request that we lock into this channel until the
-     *                 refund transaction unlocks. Note that if there is a previously open channel, the refund
-     *                 transaction used in this channel may be larger than maxValue. Thus, maxValue is not a method for
-     *                 limiting the amount payable through this channel.
-     * @param serverId An arbitrary hash representing this channel. This must uniquely identify the server. If an
-     *                 existing stored channel exists in the wallet's {@link StoredPaymentChannelClientStates}, then an
-     *                 attempt will be made to resume that channel.
-     * @param conn A callback listener which represents the connection to the server (forwards messages we generate to
-     *             the server)
-     * @param versionSelector An enum indicating which versions to support:
-     *                        VERSION_1: use only version 1 of the protocol
-     *                        VERSION_2_ALLOW_1: suggest version 2 but allow downgrade to version 1
-     *                        VERSION_2: suggest version 2 and enforce use of version 2
-     *
-     */
-    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId,
-                                ClientConnection conn, VersionSelector versionSelector) {
-      this(wallet,myKey,maxValue,serverId, DEFAULT_TIME_WINDOW, null, conn, versionSelector);
+    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId, ClientConnection conn) {
+        this(wallet,myKey,maxValue,serverId, null, conn);
     }
 
     /**
@@ -212,16 +186,13 @@ public class PaymentChannelClient implements IPaymentChannelClient {
      * @param serverId An arbitrary hash representing this channel. This must uniquely identify the server. If an
      *                 existing stored channel exists in the wallet's {@link StoredPaymentChannelClientStates}, then an
      *                 attempt will be made to resume that channel.
-     * @param timeWindow The time in seconds, relative to now, on how long this channel should be kept open. Note that is is
-     *                   a proposal to the server. The server may in turn propose something different.
-     *                   See {@link org.bitcoinj.protocols.channels.IPaymentChannelClient.ClientConnection#acceptExpireTime(long)}
      * @param userKeySetup Key derived from a user password, used to decrypt myKey, if it is encrypted, during setup.
      * @param conn A callback listener which represents the connection to the server (forwards messages we generate to
      *             the server)
      */
-    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId, long timeWindow,
+    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId,
                                 @Nullable KeyParameter userKeySetup, ClientConnection conn) {
-        this(wallet, myKey, maxValue, serverId, timeWindow, userKeySetup, conn, VersionSelector.VERSION_2_ALLOW_1);
+        this(wallet, myKey, maxValue, serverId, userKeySetup, defaultChannelProperties, conn);
     }
 
     /**
@@ -237,28 +208,28 @@ public class PaymentChannelClient implements IPaymentChannelClient {
      * @param serverId An arbitrary hash representing this channel. This must uniquely identify the server. If an
      *                 existing stored channel exists in the wallet's {@link StoredPaymentChannelClientStates}, then an
      *                 attempt will be made to resume that channel.
-     * @param timeWindow The time in seconds, relative to now, on how long this channel should be kept open. Note that is is
-     *                   a proposal to the server. The server may in turn propose something different.
-     *                   See {@link org.bitcoinj.protocols.channels.IPaymentChannelClient.ClientConnection#acceptExpireTime(long)}
      * @param userKeySetup Key derived from a user password, used to decrypt myKey, if it is encrypted, during setup.
+     * @param clientChannelProperties Modify the channel's properties. You may extend {@link DefaultClientChannelProperties}
      * @param conn A callback listener which represents the connection to the server (forwards messages we generate to
      *             the server)
-     * @param versionSelector An enum indicating which versions to support:
-     *                        VERSION_1: use only version 1 of the protocol
-     *                        VERSION_2_ALLOW_1: suggest version 2 but allow downgrade to version 1
-     *                        VERSION_2: suggest version 2 and enforce use of version 2
      */
-    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId, long timeWindow,
-                                @Nullable KeyParameter userKeySetup, ClientConnection conn, VersionSelector versionSelector) {
+    public PaymentChannelClient(Wallet wallet, ECKey myKey, Coin maxValue, Sha256Hash serverId,
+                                @Nullable KeyParameter userKeySetup, @Nullable ClientChannelProperties clientChannelProperties,
+                                ClientConnection conn) {
         this.wallet = checkNotNull(wallet);
         this.myKey = checkNotNull(myKey);
         this.maxValue = checkNotNull(maxValue);
         this.serverId = checkNotNull(serverId);
-        checkState(timeWindow >= 0);
-        this.timeWindow = timeWindow;
         this.conn = checkNotNull(conn);
         this.userKeySetup = userKeySetup;
-        this.versionSelector = versionSelector;
+        if (clientChannelProperties == null) {
+            this.clientChannelProperties = defaultChannelProperties;
+        } else {
+            this.clientChannelProperties = clientChannelProperties;
+        }
+        this.timeWindow = clientChannelProperties.timeWindow();
+        checkState(timeWindow >= 0);
+        this.versionSelector = clientChannelProperties.versionSelector();
     }
 
     /** 
@@ -299,12 +270,12 @@ public class PaymentChannelClient implements IPaymentChannelClient {
 
         // For now we require a hard-coded value. In future this will have to get more complex and dynamic as the fees
         // start to float.
-        final long MIN_PAYMENT = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.value;
-        if (initiate.getMinPayment() != MIN_PAYMENT) {
-            log.error("Server requested a min payment of {} but we expected {}", initiate.getMinPayment(), MIN_PAYMENT);
+        final long maxMin = clientChannelProperties.acceptableMinPayment().value;
+        if (initiate.getMinPayment() > maxMin) {
+            log.error("Server requested a min payment of {} but we only accept up to {}", initiate.getMinPayment(), maxMin);
             errorBuilder.setCode(Protos.Error.ErrorCode.MIN_PAYMENT_TOO_LARGE);
-            errorBuilder.setExpectedValue(MIN_PAYMENT);
-            missing = Coin.valueOf(initiate.getMinPayment() - MIN_PAYMENT);
+            errorBuilder.setExpectedValue(maxMin);
+            missing = Coin.valueOf(initiate.getMinPayment() - maxMin);
             return CloseReason.SERVER_REQUESTED_TOO_MUCH_VALUE;
         }
 
@@ -322,7 +293,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
                 return CloseReason.NO_ACCEPTABLE_VERSION;
         }
         try {
-            state.initiate(userKeySetup);
+            state.initiate(userKeySetup, clientChannelProperties);
         } catch (ValueOutOfRangeException e) {
             log.error("Value out of range when trying to initiate", e);
             errorBuilder.setCode(Protos.Error.ErrorCode.CHANNEL_VALUE_TOO_LARGE);
@@ -378,7 +349,8 @@ public class PaymentChannelClient implements IPaymentChannelClient {
     }
 
     @GuardedBy("lock")
-    private void receiveRefund(Protos.TwoWayChannelMessage refundMsg, @Nullable KeyParameter userKey) throws VerificationException {
+    private void receiveRefund(Protos.TwoWayChannelMessage refundMsg, @Nullable KeyParameter userKey)
+            throws SignatureDecodeException, VerificationException {
         checkState(majorVersion == 1);
         checkState(step == InitStep.WAITING_FOR_REFUND_RETURN && refundMsg.hasReturnRefund());
         log.info("Got RETURN_REFUND message, providing signed contract");
@@ -498,11 +470,13 @@ public class PaymentChannelClient implements IPaymentChannelClient {
                         closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
                         break;
                 }
-            } catch (VerificationException e) {
+            } catch (SignatureDecodeException | VerificationException e) {
                 log.error("Caught verification exception handling message from server", e);
                 errorBuilder = Protos.Error.newBuilder()
-                        .setCode(Protos.Error.ErrorCode.BAD_TRANSACTION)
-                        .setExplanation(e.getMessage());
+                        .setCode(Protos.Error.ErrorCode.BAD_TRANSACTION);
+                final String message = e.getMessage();
+                if (message != null)
+                    errorBuilder.setExplanation(message);
                 closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
             } catch (IllegalStateException e) {
                 log.error("Caught illegal state exception handling message from server", e);
@@ -537,7 +511,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
         checkState(lock.isHeldByCurrentThread());
         if (msg.hasSettlement()) {
             Transaction settleTx = wallet.getParams().getDefaultSerializer().makeTransaction(msg.getSettlement().getTx().toByteArray());
-            log.info("CLOSE message received with settlement tx {}", settleTx.getHash());
+            log.info("CLOSE message received with settlement tx {}", settleTx.getTxId());
             // TODO: set source
             if (state != null && state().isSettlementTransaction(settleTx)) {
                 // The wallet has a listener on it that the state object will use to do the right thing at this
@@ -563,7 +537,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
      * intending to reopen the channel later. There is likely little reason to use this in a stateless protocol.</p>
      *
      * <p>Note that this <b>MUST</b> still be called even after either
-     * {@link ClientConnection#destroyConnection(org.bitcoinj.protocols.channels.PaymentChannelCloseException.CloseReason)} or
+     * {@link IPaymentChannelClient.ClientConnection#destroyConnection(PaymentChannelCloseException.CloseReason)} or
      * {@link PaymentChannelClient#settle()} is called, to actually handle the connection close logic.</p>
      */
     @Override
@@ -583,7 +557,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
      * payment transaction.</p>
      *
      * <p>Note that this only generates a CLOSE message for the server and calls
-     * {@link ClientConnection#destroyConnection(CloseReason)} to settle the connection, it does not
+     * {@link IPaymentChannelClient.ClientConnection#destroyConnection(PaymentChannelCloseException.CloseReason)} to settle the connection, it does not
      * actually handle connection close logic, and {@link PaymentChannelClient#connectionClosed()} must still be called
      * after the connection fully closes.</p>
      *
@@ -628,8 +602,8 @@ public class PaymentChannelClient implements IPaymentChannelClient {
                     .setTimeWindowSecs(timeWindow);
 
             if (storedChannel != null) {
-                versionNegotiationBuilder.setPreviousChannelContractHash(ByteString.copyFrom(storedChannel.contract.getHash().getBytes()));
-                log.info("Begun version handshake, attempting to reopen channel with contract hash {}", storedChannel.contract.getHash());
+                versionNegotiationBuilder.setPreviousChannelContractHash(ByteString.copyFrom(storedChannel.contract.getTxId().getBytes()));
+                log.info("Begun version handshake, attempting to reopen channel with contract hash {}", storedChannel.contract.getTxId());
             } else
                 log.info("Begun version handshake creating new channel");
 
@@ -720,7 +694,7 @@ public class PaymentChannelClient implements IPaymentChannelClient {
                     increasePaymentFuture = null;
                     lock.unlock();
                 }
-            }, MoreExecutors.sameThreadExecutor());
+            }, MoreExecutors.directExecutor());
 
             conn.sendToServer(Protos.TwoWayChannelMessage.newBuilder()
                     .setUpdatePayment(updatePaymentBuilder)
@@ -751,4 +725,28 @@ public class PaymentChannelClient implements IPaymentChannelClient {
         // Ensure the future runs without the client lock held.
         future.set(new PaymentIncrementAck(value, paymentAck.getInfo()));
     }
+
+    public static class DefaultClientChannelProperties implements ClientChannelProperties {
+
+        @Override
+        public SendRequest modifyContractSendRequest(SendRequest sendRequest) {
+            return sendRequest;
+        }
+
+        @Override
+        public Coin acceptableMinPayment() { return Transaction.REFERENCE_DEFAULT_MIN_TX_FEE; }
+
+        @Override
+        public long timeWindow() {
+            return DEFAULT_TIME_WINDOW;
+        }
+
+        @Override
+        public VersionSelector versionSelector() {
+            return VersionSelector.VERSION_2_ALLOW_1;
+        }
+
+    }
+
+    public static DefaultClientChannelProperties defaultChannelProperties = new DefaultClientChannelProperties();
 }

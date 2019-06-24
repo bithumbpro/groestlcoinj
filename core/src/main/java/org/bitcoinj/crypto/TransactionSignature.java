@@ -16,6 +16,7 @@
 
 package org.bitcoinj.crypto;
 
+import org.bitcoinj.core.SignatureDecodeException;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.VerificationException;
@@ -26,7 +27,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 
 /**
- * A TransactionSignature wraps an {@link org.bitcoinj.core.ECKey.ECDSASignature} and adds methods for handling
+ * A TransactionSignature wraps an {@link ECKey.ECDSASignature} and adds methods for handling
  * the additional SIGHASH mode byte that is used.
  */
 public class TransactionSignature extends ECKey.ECDSASignature {
@@ -161,36 +162,17 @@ public class TransactionSignature extends ECKey.ECDSASignature {
      *
      * @param requireCanonicalEncoding if the encoding of the signature must
      * be canonical.
-     * @throws RuntimeException if the signature is invalid or unparseable in some way.
-     * @deprecated use {@link #decodeFromBitcoin(byte[], boolean, boolean} instead}.
-     */
-    @Deprecated
-    public static TransactionSignature decodeFromBitcoin(byte[] bytes,
-                                                         boolean requireCanonicalEncoding) throws VerificationException {
-        return decodeFromBitcoin(bytes, requireCanonicalEncoding, false);
-    }
-
-    /**
-     * Returns a decoded signature.
-     *
-     * @param requireCanonicalEncoding if the encoding of the signature must
-     * be canonical.
      * @param requireCanonicalSValue if the S-value must be canonical (below half
      * the order of the curve).
-     * @throws RuntimeException if the signature is invalid or unparseable in some way.
+     * @throws SignatureDecodeException if the signature is unparseable in some way.
+     * @throws VerificationException if the signature is invalid.
      */
-    public static TransactionSignature decodeFromBitcoin(byte[] bytes,
-                                                         boolean requireCanonicalEncoding,
-                                                         boolean requireCanonicalSValue) throws VerificationException {
+    public static TransactionSignature decodeFromBitcoin(byte[] bytes, boolean requireCanonicalEncoding,
+            boolean requireCanonicalSValue) throws SignatureDecodeException, VerificationException {
         // Bitcoin encoding is DER signature + sighash byte.
         if (requireCanonicalEncoding && !isEncodingCanonical(bytes))
             throw new VerificationException("Signature encoding is not canonical.");
-        ECKey.ECDSASignature sig;
-        try {
-            sig = ECKey.ECDSASignature.decodeFromDER(bytes);
-        } catch (IllegalArgumentException e) {
-            throw new VerificationException("Could not decode DER", e);
-        }
+        ECKey.ECDSASignature sig = ECKey.ECDSASignature.decodeFromDER(bytes);
         if (requireCanonicalSValue && !sig.isCanonical())
             throw new VerificationException("S-value is not canonical.");
 

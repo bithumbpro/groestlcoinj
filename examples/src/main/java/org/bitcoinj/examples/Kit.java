@@ -1,4 +1,6 @@
 /*
+ * Copyright by the original author or authors.
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -66,7 +68,7 @@ public class Kit {
         kit.wallet().addCoinsReceivedEventListener(new WalletCoinsReceivedEventListener() {
             @Override
             public void onCoinsReceived(Wallet wallet, Transaction tx, Coin prevBalance, Coin newBalance) {
-                System.out.println("-----> coins resceived: " + tx.getHashAsString());
+                System.out.println("-----> coins resceived: " + tx.getTxId());
                 System.out.println("received: " + tx.getValue(wallet));
             }
         });
@@ -95,7 +97,7 @@ public class Kit {
         kit.wallet().addTransactionConfidenceEventListener(new TransactionConfidenceEventListener() {
             @Override
             public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
-                System.out.println("-----> confidence changed: " + tx.getHashAsString());
+                System.out.println("-----> confidence changed: " + tx.getTxId());
                 TransactionConfidence confidence = tx.getConfidence();
                 System.out.println("new block depth: " + confidence.getDepthInBlocks());
             }

@@ -1,4 +1,6 @@
 /*
+ * Copyright by the original author or authors.
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,7 +16,6 @@
 
 package wallettemplate;
 
-import com.google.protobuf.*;
 import javafx.application.*;
 import javafx.event.*;
 import javafx.fxml.*;
@@ -23,10 +24,13 @@ import javafx.scene.layout.*;
 import org.bitcoinj.crypto.*;
 import org.bitcoinj.wallet.*;
 import org.slf4j.*;
-import org.spongycastle.crypto.params.*;
+import org.bouncycastle.crypto.params.*;
+
+import com.google.protobuf.ByteString;
+
 import wallettemplate.utils.*;
 
-import java.time.*;
+import java.time.Duration;
 import java.util.concurrent.*;
 
 import static wallettemplate.utils.GuiUtils.*;

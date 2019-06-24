@@ -22,6 +22,7 @@ import org.bitcoinj.wallet.Wallet;
 
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 
 import java.util.concurrent.LinkedBlockingQueue;
@@ -52,7 +53,7 @@ public class MockTransactionBroadcaster implements TransactionBroadcaster {
         }
     }
 
-    private final LinkedBlockingQueue<TxFuturePair> broadcasts = new LinkedBlockingQueue<TxFuturePair>();
+    private final LinkedBlockingQueue<TxFuturePair> broadcasts = new LinkedBlockingQueue<>();
 
     /** Sets this mock broadcaster on the given wallet. */
     public MockTransactionBroadcaster(Wallet wallet) {
@@ -88,7 +89,7 @@ public class MockTransactionBroadcaster implements TransactionBroadcaster {
                 @Override
                 public void onFailure(Throwable t) {
                 }
-            });
+            }, MoreExecutors.directExecutor());
             return TransactionBroadcast.createMockBroadcast(tx, result);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);

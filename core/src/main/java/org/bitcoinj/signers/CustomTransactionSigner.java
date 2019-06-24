@@ -1,5 +1,6 @@
 /*
  * Copyright 2014 Kosta Korenkov
+ * Copyright 2019 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +21,8 @@ import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.Script;
+import org.bitcoinj.script.ScriptException;
+import org.bitcoinj.script.ScriptPattern;
 import org.bitcoinj.wallet.KeyBag;
 import org.bitcoinj.wallet.RedeemData;
 import org.slf4j.Logger;
@@ -32,13 +35,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * <p>This signer may be used as a template for creating custom multisig transaction signers.</p>
  * <p>
- * Concrete implementations have to implement {@link #getSignature(org.bitcoinj.core.Sha256Hash, java.util.List)}
+ * Concrete implementations have to implement {@link #getSignature(Sha256Hash, List)}
  * method returning a signature and a public key of the keypair used to created that signature.
  * It's up to custom implementation where to locate signatures: it may be a network connection,
  * some local API or something else.
  * </p>
  */
-public abstract class CustomTransactionSigner extends StatelessTransactionSigner {
+public abstract class CustomTransactionSigner implements TransactionSigner {
     private static final Logger log = LoggerFactory.getLogger(CustomTransactionSigner.class);
 
     @Override
@@ -57,7 +60,7 @@ public abstract class CustomTransactionSigner extends StatelessTransactionSigner
                 continue;
             }
             Script scriptPubKey = txOut.getScriptPubKey();
-            if (!scriptPubKey.isPayToScriptHash()) {
+            if (!ScriptPattern.isP2SH(scriptPubKey)) {
                 log.warn("CustomTransactionSigner works only with P2SH transactions");
                 return false;
             }
@@ -68,7 +71,8 @@ public abstract class CustomTransactionSigner extends StatelessTransactionSigner
                 // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
                 // we sign missing pieces (to check this would require either assuming any signatures are signing
                 // standard output types or a way to get processed signatures out of script execution)
-                txIn.getScriptSig().correctlySpends(tx, i, txIn.getConnectedOutput().getScriptPubKey());
+                txIn.getScriptSig().correctlySpends(tx, i, txIn.getWitness(), txOut.getValue(), txOut.getScriptPubKey(),
+                        Script.ALL_VERIFY_FLAGS);
                 log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
                 continue;
             } catch (ScriptException e) {

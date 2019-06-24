@@ -1,24 +1,15 @@
 # configuration for https://travis-ci.org/bitcoinj/bitcoinj
 sudo: false
-dist: precise
+dist: xenial
 language: java
-addons:
-  hosts:
-    - host
-  hostname: host
-jdk: oraclejdk8
-install: true # remove default
+jdk:
+  - openjdk8
+  - openjdk11
+install: true
+before_script:
+  - gradle wrapper --gradle-version=4.10.3
 script:
-  - mvn -q clean install -Pno-network
-  - jdk_switcher use openjdk6
-  - cd orchid
-  - mvn -q clean package
-  - cd ../core
-  - mvn -q clean package -Pno-network
-
-after_success:
-  - cd ../core
-  - mvn jacoco:report coveralls:report
+  - ./gradlew clean build
 
 notifications:
   irc:

@@ -16,13 +16,14 @@
 
 package org.bitcoinj.crypto;
 
+import java.util.List;
 import java.util.Locale;
 
 import com.google.common.primitives.Ints;
 
 /**
  * <p>This is just a wrapper for the i (child number) as per BIP 32 with a boolean getter for the most significant bit
- * and a getter for the actual 0-based child number. A {@link java.util.List} of these forms a <i>path</i> through a
+ * and a getter for the actual 0-based child number. A {@link List} of these forms a <i>path</i> through a
  * {@link DeterministicHierarchy}. This class is immutable.
  */
 public class ChildNumber implements Comparable<ChildNumber> {
@@ -36,8 +37,9 @@ public class ChildNumber implements Comparable<ChildNumber> {
     public static final int HARDENED_BIT = 0x80000000;
 
     public static final ChildNumber ZERO = new ChildNumber(0);
-    public static final ChildNumber ONE = new ChildNumber(1);
     public static final ChildNumber ZERO_HARDENED = new ChildNumber(0, true);
+    public static final ChildNumber ONE = new ChildNumber(1);
+    public static final ChildNumber ONE_HARDENED = new ChildNumber(1, true);
 
     /** Integer i as per BIP 32 spec, including the MSB denoting derivation type (0 = public, 1 = private) **/
     private final int i;

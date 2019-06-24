@@ -33,7 +33,7 @@ import java.util.Set;
  * log, email), or if you decide to use alerts for notifications that are specific to your app in some way, to parse it.
  * For example, you could treat it as an upgrade notification specific to your app. Satoshi designed alerts to ensure
  * that software upgrades could be distributed independently of a hard-coded website, in order to allow everything to
- * be purely peer-to-peer. You don't have to use this of course, and indeed it often makes more sense not to.<p>
+ * be purely peer-to-peer. You don't have to use this of course, and indeed it often makes more sense not to.</p>
  *     
  * <p>Before doing anything with an alert, you should check {@link AlertMessage#isSignatureValid()}.</p>
  * 
@@ -89,7 +89,7 @@ public class AlertMessage extends Message {
         }
         // Using a hashset here is very inefficient given that this will normally be only one item. But Java doesn't
         // make it easy to do better. What we really want is just an array-backed set.
-        Set<Long> cancelSet = new HashSet<Long>((int) cancelSetSize);
+        Set<Long> cancelSet = new HashSet<>((int) cancelSetSize);
         for (long i = 0; i < cancelSetSize; i++) {
             cancelSet.add(readUint32());
         }
@@ -100,7 +100,7 @@ public class AlertMessage extends Message {
         if (subverSetSize < 0 || subverSetSize > MAX_SET_SIZE) {
             throw new ProtocolException("Bad subver set size: " + subverSetSize);
         }
-        Set<String> matchingSubVers = new HashSet<String>((int) subverSetSize);
+        Set<String> matchingSubVers = new HashSet<>((int) subverSetSize);
         for (long i = 0; i < subverSetSize; i++) {
             matchingSubVers.add(readStr());
         }
@@ -117,7 +117,11 @@ public class AlertMessage extends Message {
      * doesn't verify, because that would allow arbitrary attackers to spam your users.
      */
     public boolean isSignatureValid() {
-        return ECKey.verify(Groestl.digest(content), signature, params.getAlertSigningKey());
+        try {
+            return ECKey.verify(Sha256Hash.hashTwice(content), signature, params.getAlertSigningKey());
+        } catch (SignatureDecodeException e) {
+            return false;
+        }
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

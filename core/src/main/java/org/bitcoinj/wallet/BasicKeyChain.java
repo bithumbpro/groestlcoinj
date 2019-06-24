@@ -1,5 +1,6 @@
 /*
  * Copyright 2013 Google Inc.
+ * Copyright 2019 Andreas Schildbach
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +19,7 @@ package org.bitcoinj.wallet;
 
 import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.crypto.*;
 import org.bitcoinj.utils.ListenerRegistration;
 import org.bitcoinj.utils.Threading;
@@ -26,7 +28,7 @@ import org.bitcoinj.wallet.listeners.KeyChainEventListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -44,7 +46,7 @@ import static com.google.common.base.Preconditions.*;
 public class BasicKeyChain implements EncryptableKeyChain {
     private final ReentrantLock lock = Threading.lock("BasicKeyChain");
 
-    // Maps used to let us quickly look up a key given data we find in transcations or the block chain.
+    // Maps used to let us quickly look up a key given data we find in transactions or the block chain.
     private final LinkedHashMap<ByteString, ECKey> hashToKeys;
     private final LinkedHashMap<ByteString, ECKey> pubkeyToKeys;
     @Nullable private final KeyCrypter keyCrypter;
@@ -58,9 +60,9 @@ public class BasicKeyChain implements EncryptableKeyChain {
 
     public BasicKeyChain(@Nullable KeyCrypter crypter) {
         this.keyCrypter = crypter;
-        hashToKeys = new LinkedHashMap<ByteString, ECKey>();
-        pubkeyToKeys = new LinkedHashMap<ByteString, ECKey>();
-        listeners = new CopyOnWriteArrayList<ListenerRegistration<KeyChainEventListener>>();
+        hashToKeys = new LinkedHashMap<>();
+        pubkeyToKeys = new LinkedHashMap<>();
+        listeners = new CopyOnWriteArrayList<>();
     }
 
     /** Returns the {@link KeyCrypter} in use or null if the key chain is not encrypted. */
@@ -99,7 +101,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
             if (hashToKeys.size() < numberOfKeys) {
                 checkState(keyCrypter == null);
 
-                List<ECKey> keys = new ArrayList<ECKey>();
+                List<ECKey> keys = new ArrayList<>();
                 for (int i = 0; i < numberOfKeys - hashToKeys.size(); i++) {
                     keys.add(new ECKey());
                 }
@@ -109,7 +111,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
                 queueOnKeysAdded(immutableKeys);
             }
 
-            List<ECKey> keysToReturn = new ArrayList<ECKey>();
+            List<ECKey> keysToReturn = new ArrayList<>();
             int count = 0;
             while (hashToKeys.values().iterator().hasNext() && numberOfKeys != count) {
                 keysToReturn.add(hashToKeys.values().iterator().next());
@@ -125,7 +127,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
     public List<ECKey> getKeys() {
         lock.lock();
         try {
-            return new ArrayList<ECKey>(hashToKeys.values());
+            return new ArrayList<>(hashToKeys.values());
         } finally {
             lock.unlock();
         }
@@ -145,7 +147,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
             for (ECKey key : keys) {
                 checkKeyEncryptionStateMatches(key);
             }
-            List<ECKey> actuallyAdded = new ArrayList<ECKey>(keys.size());
+            List<ECKey> actuallyAdded = new ArrayList<>(keys.size());
             for (final ECKey key : keys) {
                 if (hasKey(key)) continue;
                 actuallyAdded.add(key);
@@ -203,19 +205,19 @@ public class BasicKeyChain implements EncryptableKeyChain {
         }
     }
 
-    public ECKey findKeyFromPubHash(byte[] pubkeyHash) {
+    public ECKey findKeyFromPubHash(byte[] pubKeyHash) {
         lock.lock();
         try {
-            return hashToKeys.get(ByteString.copyFrom(pubkeyHash));
+            return hashToKeys.get(ByteString.copyFrom(pubKeyHash));
         } finally {
             lock.unlock();
         }
     }
 
-    public ECKey findKeyFromPubKey(byte[] pubkey) {
+    public ECKey findKeyFromPubKey(byte[] pubKey) {
         lock.lock();
         try {
-            return pubkeyToKeys.get(ByteString.copyFrom(pubkey));
+            return pubkeyToKeys.get(ByteString.copyFrom(pubKey));
         } finally {
             lock.unlock();
         }
@@ -284,7 +286,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
     }
 
     public List<ListenerRegistration<KeyChainEventListener>> getListeners() {
-        return new ArrayList<ListenerRegistration<KeyChainEventListener>>(listeners);
+        return new ArrayList<>(listeners);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -294,7 +296,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     Map<ECKey, Protos.Key.Builder> serializeToEditableProtobufs() {
-        Map<ECKey, Protos.Key.Builder> result = new LinkedHashMap<ECKey, Protos.Key.Builder>();
+        Map<ECKey, Protos.Key.Builder> result = new LinkedHashMap<>();
         for (ECKey ecKey : hashToKeys.values()) {
             Protos.Key.Builder protoKey = serializeEncryptableItem(ecKey);
             protoKey.setPublicKey(ByteString.copyFrom(ecKey.getPubKey()));
@@ -306,7 +308,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
     @Override
     public List<Protos.Key> serializeToProtobuf() {
         Collection<Protos.Key.Builder> builders = serializeToEditableProtobufs().values();
-        List<Protos.Key> result = new ArrayList<Protos.Key>(builders.size());
+        List<Protos.Key> result = new ArrayList<>(builders.size());
         for (Protos.Key.Builder builder : builders) result.add(builder.build());
         return result;
     }
@@ -407,7 +409,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
 
     @Override
     public void addEventListener(KeyChainEventListener listener, Executor executor) {
-        listeners.add(new ListenerRegistration<KeyChainEventListener>(listener, executor));
+        listeners.add(new ListenerRegistration<>(listener, executor));
     }
 
     @Override
@@ -434,8 +436,8 @@ public class BasicKeyChain implements EncryptableKeyChain {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
-     * Convenience wrapper around {@link #toEncrypted(org.bitcoinj.crypto.KeyCrypter,
-     * org.spongycastle.crypto.params.KeyParameter)} which uses the default Scrypt key derivation algorithm and
+     * Convenience wrapper around {@link #toEncrypted(KeyCrypter,
+     * org.bouncycastle.crypto.params.KeyParameter)} which uses the default Scrypt key derivation algorithm and
      * parameters, derives a key from the given password and returns the created key.
      */
     @Override
@@ -449,7 +451,7 @@ public class BasicKeyChain implements EncryptableKeyChain {
 
     /**
      * Encrypt the wallet using the KeyCrypter and the AES key. A good default KeyCrypter to use is
-     * {@link org.bitcoinj.crypto.KeyCrypterScrypt}.
+     * {@link KeyCrypterScrypt}.
      *
      * @param keyCrypter The KeyCrypter that specifies how to encrypt/ decrypt a key
      * @param aesKey AES key to use (normally created using KeyCrypter#deriveKey and cached as it is time consuming
@@ -617,5 +619,14 @@ public class BasicKeyChain implements EncryptableKeyChain {
         } finally {
             lock.unlock();
         }
+    }
+
+    public String toString(boolean includePrivateKeys, @Nullable KeyParameter aesKey, NetworkParameters params) {
+        final StringBuilder builder = new StringBuilder();
+        List<ECKey> keys = getKeys();
+        Collections.sort(keys, ECKey.AGE_COMPARATOR);
+        for (ECKey key : keys)
+            key.formatKeyWithAddress(includePrivateKeys, aesKey, builder, params, null, "imported");
+        return builder.toString();
     }
 }

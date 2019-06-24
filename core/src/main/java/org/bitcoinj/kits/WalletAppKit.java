@@ -18,12 +18,14 @@
 package org.bitcoinj.kits;
 
 import com.google.common.collect.*;
+import com.google.common.io.Closeables;
 import com.google.common.util.concurrent.*;
-import com.subgraph.orchid.*;
 import org.bitcoinj.core.listeners.*;
 import org.bitcoinj.core.*;
+import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.net.discovery.*;
 import org.bitcoinj.protocols.channels.*;
+import org.bitcoinj.script.Script;
 import org.bitcoinj.store.*;
 import org.bitcoinj.wallet.*;
 import org.slf4j.*;
@@ -55,15 +57,17 @@ import static com.google.common.base.Preconditions.*;
  * means doing potentially blocking file IO, generating keys and other potentially intensive operations. By running it
  * on a background thread, there's no risk of accidentally causing UI lag.</p>
  *
- * <p>Note that {@link #awaitRunning()} can throw an unchecked {@link java.lang.IllegalStateException}
+ * <p>Note that {@link #awaitRunning()} can throw an unchecked {@link IllegalStateException}
  * if anything goes wrong during startup - you should probably handle it and use {@link Exception#getCause()} to figure
  * out what went wrong more precisely. Same thing if you just use the {@link #startAsync()} method.</p>
  */
 public class WalletAppKit extends AbstractIdleService {
     protected static final Logger log = LoggerFactory.getLogger(WalletAppKit.class);
 
-    protected final String filePrefix;
     protected final NetworkParameters params;
+    protected final Script.ScriptType preferredOutputScriptType;
+    protected final KeyChainGroupStructure structure;
+    protected final String filePrefix;
     protected volatile BlockChain vChain;
     protected volatile BlockStore vStore;
     protected volatile Wallet vWallet;
@@ -78,10 +82,10 @@ public class WalletAppKit extends AbstractIdleService {
     protected boolean autoStop = true;
     protected InputStream checkpoints;
     protected boolean blockingStartup = true;
-    protected boolean useTor = false;   // Perhaps in future we can change this to true.
     protected String userAgent, version;
     protected WalletProtobufSerializer.WalletFactory walletFactory;
     @Nullable protected DeterministicSeed restoreFromSeed;
+    @Nullable protected DeterministicKey restoreFromKey;
     @Nullable protected PeerDiscovery discovery;
 
     protected volatile Context context;
@@ -90,15 +94,26 @@ public class WalletAppKit extends AbstractIdleService {
      * Creates a new WalletAppKit, with a newly created {@link Context}. Files will be stored in the given directory.
      */
     public WalletAppKit(NetworkParameters params, File directory, String filePrefix) {
-        this(new Context(params), directory, filePrefix);
+        this(new Context(params), Script.ScriptType.P2PKH, null, directory, filePrefix);
+    }
+
+    /**
+     * Creates a new WalletAppKit, with a newly created {@link Context}. Files will be stored in the given directory.
+     */
+    public WalletAppKit(NetworkParameters params, Script.ScriptType preferredOutputScriptType,
+            @Nullable KeyChainGroupStructure structure, File directory, String filePrefix) {
+        this(new Context(params), preferredOutputScriptType, structure, directory, filePrefix);
     }
 
     /**
      * Creates a new WalletAppKit, with the given {@link Context}. Files will be stored in the given directory.
      */
-    public WalletAppKit(Context context, File directory, String filePrefix) {
+    public WalletAppKit(Context context, Script.ScriptType preferredOutputScriptType,
+            @Nullable KeyChainGroupStructure structure, File directory, String filePrefix) {
         this.context = context;
         this.params = checkNotNull(context.getParams());
+        this.preferredOutputScriptType = checkNotNull(preferredOutputScriptType);
+        this.structure = structure != null ? structure : KeyChainGroupStructure.DEFAULT;
         this.directory = checkNotNull(directory);
         this.filePrefix = checkNotNull(filePrefix);
     }
@@ -130,7 +145,7 @@ public class WalletAppKit extends AbstractIdleService {
 
     /**
      * If you want to learn about the sync process, you can provide a listener here. For instance, a
-     * {@link org.bitcoinj.core.DownloadProgressTracker} is a good choice. This has no effect unless setBlockingStartup(false) has been called
+     * {@link DownloadProgressTracker} is a good choice. This has no effect unless setBlockingStartup(false) has been called
      * too, due to some missing implementation code.
      */
     public WalletAppKit setDownloadListener(DownloadProgressTracker listener) {
@@ -146,11 +161,12 @@ public class WalletAppKit extends AbstractIdleService {
 
     /**
      * If set, the file is expected to contain a checkpoints file calculated with BuildCheckpoints. It makes initial
-     * block sync faster for new users - please refer to the documentation on the bitcoinj website for further details.
+     * block sync faster for new users - please refer to the documentation on the bitcoinj website
+     * (https://bitcoinj.github.io/speeding-up-chain-sync) for further details.
      */
     public WalletAppKit setCheckpoints(InputStream checkpoints) {
         if (this.checkpoints != null)
-            Utils.closeUnchecked(this.checkpoints);
+            Closeables.closeQuietly(checkpoints);
         this.checkpoints = checkNotNull(checkpoints);
         return this;
     }
@@ -178,11 +194,10 @@ public class WalletAppKit extends AbstractIdleService {
     }
 
     /**
-     * If called, then an embedded Tor client library will be used to connect to the P2P network. The user does not need
-     * any additional software for this: it's all pure Java. As of April 2014 <b>this mode is experimental</b>.
+     * Sets a wallet factory which will be used when the kit creates a new wallet.
      */
-    public WalletAppKit useTor() {
-        this.useTor = true;
+    public WalletAppKit setWalletFactory(WalletProtobufSerializer.WalletFactory walletFactory) {
+        this.walletFactory = walletFactory;
         return this;
     }
 
@@ -196,6 +211,19 @@ public class WalletAppKit extends AbstractIdleService {
      */
     public WalletAppKit restoreWalletFromSeed(DeterministicSeed seed) {
         this.restoreFromSeed = seed;
+        return this;
+    }
+
+    /**
+     * If an account key is set here then any existing wallet that matches the file name will be renamed to a backup name,
+     * the chain file will be deleted, and the wallet object will be instantiated with the given key instead of
+     * a fresh seed being created. This is intended for restoring a wallet from an account key. To implement restore
+     * you would shut down the existing appkit, if any, then recreate it with the key given by the user, then start
+     * up the new kit. The next time your app starts it should work as normal (that is, don't keep calling this each
+     * time).
+     */
+    public WalletAppKit restoreWalletFromKey(DeterministicKey accountKey) {
+        this.restoreFromKey = accountKey;
         return this;
     }
 
@@ -269,12 +297,12 @@ public class WalletAppKit extends AbstractIdleService {
             File chainFile = new File(directory, filePrefix + ".spvchain");
             boolean chainFileExists = chainFile.exists();
             vWalletFile = new File(directory, filePrefix + ".wallet");
-            boolean shouldReplayWallet = (vWalletFile.exists() && !chainFileExists) || restoreFromSeed != null;
+            boolean shouldReplayWallet = (vWalletFile.exists() && !chainFileExists) || restoreFromSeed != null || restoreFromKey != null;
             vWallet = createOrLoadWallet(shouldReplayWallet);
 
             // Initiate Bitcoin network objects (block store, blockchain and peer group)
             vStore = provideBlockStore(chainFile);
-            if (!chainFileExists || restoreFromSeed != null) {
+            if (!chainFileExists || restoreFromSeed != null || restoreFromKey != null) {
                 if (checkpoints == null && !Utils.isAndroidRuntime()) {
                     checkpoints = CheckpointManager.openStream(params);
                 }
@@ -289,9 +317,20 @@ public class WalletAppKit extends AbstractIdleService {
                             vStore.close();
                             if (!chainFile.delete())
                                 throw new IOException("Failed to delete chain file in preparation for restore.");
-                            vStore = new SPVBlockStore(params, chainFile);
+                            vStore = provideBlockStore(chainFile);
                         }
-                    } else {
+                    } else if (restoreFromKey != null) {
+                        time = restoreFromKey.getCreationTimeSeconds();
+                        if (chainFileExists) {
+                            log.info("Deleting the chain file in preparation from restore.");
+                            vStore.close();
+                            if (!chainFile.delete())
+                                throw new IOException("Failed to delete chain file in preparation for restore.");
+                            vStore = provideBlockStore(chainFile);
+                        }
+                    }
+                    else
+                    {
                         time = vWallet.getEarliestKeyCreationTime();
                     }
                     if (time > 0)
@@ -303,7 +342,7 @@ public class WalletAppKit extends AbstractIdleService {
                     vStore.close();
                     if (!chainFile.delete())
                         throw new IOException("Failed to delete chain file in preparation for restore.");
-                    vStore = new SPVBlockStore(params, chainFile);
+                    vStore = provideBlockStore(chainFile);
                 }
             }
             vChain = new BlockChain(params, vStore);
@@ -317,7 +356,7 @@ public class WalletAppKit extends AbstractIdleService {
                 for (PeerAddress addr : peerAddresses) vPeerGroup.addAddress(addr);
                 vPeerGroup.setMaxConnections(peerAddresses.length);
                 peerAddresses = null;
-            } else if (!params.getId().equals(NetworkParameters.ID_REGTEST) && !useTor) {
+            } else if (!params.getId().equals(NetworkParameters.ID_REGTEST)) {
                 vPeerGroup.addPeerDiscovery(discovery != null ? discovery : new DnsDiscovery(params));
             }
             vChain.addWallet(vWallet);
@@ -348,7 +387,7 @@ public class WalletAppKit extends AbstractIdleService {
                         throw new RuntimeException(t);
 
                     }
-                });
+                }, MoreExecutors.directExecutor());
             }
         } catch (BlockStoreException e) {
             throw new IOException(e);
@@ -409,20 +448,22 @@ public class WalletAppKit extends AbstractIdleService {
     }
 
     protected Wallet createWallet() {
-        KeyChainGroup kcg;
+        KeyChainGroup.Builder kcg = KeyChainGroup.builder(params, structure);
         if (restoreFromSeed != null)
-            kcg = new KeyChainGroup(params, restoreFromSeed);
+            kcg.fromSeed(restoreFromSeed, preferredOutputScriptType);
+        else if (restoreFromKey != null)
+            kcg.addChain(DeterministicKeyChain.builder().spend(restoreFromKey).outputScriptType(preferredOutputScriptType).build());
         else
-            kcg = new KeyChainGroup(params);
+            kcg.fromRandom(preferredOutputScriptType);
         if (walletFactory != null) {
-            return walletFactory.create(params, kcg);
+            return walletFactory.create(params, kcg.build());
         } else {
-            return new Wallet(params, kcg);  // default
+            return new Wallet(params, kcg.build()); // default
         }
     }
 
     private void maybeMoveOldWalletOutOfTheWay() {
-        if (restoreFromSeed == null) return;
+        if (restoreFromSeed == null && restoreFromKey == null) return;
         if (!vWalletFile.exists()) return;
         int counter = 1;
         File newName;
@@ -456,13 +497,7 @@ public class WalletAppKit extends AbstractIdleService {
 
 
     protected PeerGroup createPeerGroup() throws TimeoutException {
-        if (useTor) {
-            TorClient torClient = new TorClient();
-            torClient.getConfig().setDataDirectory(directory);
-            return PeerGroup.newWithTor(params, vChain, torClient);
-        }
-        else
-            return new PeerGroup(params, vChain);
+        return new PeerGroup(params, vChain);
     }
 
     private void installShutdownHook() {

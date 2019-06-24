@@ -19,7 +19,6 @@ package com.hashengineering.crypto;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Utils;
 import com.google.common.io.ByteStreams;
-import org.spongycastle.util.encoders.Hex;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -54,7 +53,7 @@ public class Sha512Hash implements Serializable, Comparable {
      */
     public Sha512Hash(String hexString) {
         checkArgument(hexString.length() == 64);
-        this.bytes = Hex.decode(hexString);
+        this.bytes = Utils.HEX.decode(hexString);
     }
 
     /**
@@ -137,7 +136,7 @@ public class Sha512Hash implements Serializable, Comparable {
         for (int i = 0; i < 32; i++){
             result[i] = bytes[i];
         }
-        return new Sha256Hash(result);
+        return Sha256Hash.wrap(result);
     }
 
     /*public Sha512Hash bitwiseAnd(Sha512Hash x)

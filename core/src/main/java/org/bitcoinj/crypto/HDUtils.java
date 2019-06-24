@@ -21,9 +21,9 @@ import org.bitcoinj.core.ECKey;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
-import org.spongycastle.crypto.digests.SHA512Digest;
-import org.spongycastle.crypto.macs.HMac;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.digests.SHA512Digest;
+import org.bouncycastle.crypto.macs.HMac;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nonnull;
 import java.nio.ByteBuffer;
@@ -91,7 +91,7 @@ public final class HDUtils {
      */
     public static List<ChildNumber> parsePath(@Nonnull String path) {
         String[] parsedNodes = path.replace("M", "").split("/");
-        List<ChildNumber> nodes = new ArrayList<ChildNumber>();
+        List<ChildNumber> nodes = new ArrayList<>();
 
         for (String n : parsedNodes) {
             n = n.replaceAll(" ", "");

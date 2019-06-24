@@ -18,7 +18,7 @@ package org.bitcoinj.crypto;
 
 import com.google.common.collect.*;
 import org.bitcoinj.core.*;
-import org.spongycastle.math.ec.*;
+import org.bouncycastle.math.ec.*;
 
 import java.math.*;
 import java.nio.*;
@@ -57,8 +57,8 @@ public final class HDKeyDerivation {
      * broken by attackers (this is not theoretical, people have had money stolen that way). This method checks
      * that the given seed is at least 64 bits long.
      *
-     * @throws HDDerivationException if generated master key is invalid (private key 0 or >= n).
-     * @throws IllegalArgumentException if the seed is less than 8 bytes and could be brute forced.
+     * @throws HDDerivationException if generated master key is invalid (private key not between 0 and n inclusive)
+     * @throws IllegalArgumentException if the seed is less than 8 bytes and could be brute forced
      */
     public static DeterministicKey createMasterPrivateKey(byte[] seed) throws HDDerivationException {
         checkArgument(seed.length > 8, "Seed is too short and could be brute forced");
@@ -79,13 +79,23 @@ public final class HDKeyDerivation {
     }
 
     /**
-     * @throws HDDerivationException if privKeyBytes is invalid (0 or >= n).
+     * @throws HDDerivationException if privKeyBytes is invalid (not between 0 and n inclusive).
      */
-    public static DeterministicKey createMasterPrivKeyFromBytes(byte[] privKeyBytes, byte[] chainCode) throws HDDerivationException {
+    public static DeterministicKey createMasterPrivKeyFromBytes(byte[] privKeyBytes, byte[] chainCode)
+            throws HDDerivationException {
+        // childNumberPath is an empty list because we are creating the root key.
+        return createMasterPrivKeyFromBytes(privKeyBytes, chainCode, ImmutableList.<ChildNumber> of());
+    }
+
+    /**
+     * @throws HDDerivationException if privKeyBytes is invalid (not between 0 and n inclusive).
+     */
+    public static DeterministicKey createMasterPrivKeyFromBytes(byte[] privKeyBytes, byte[] chainCode,
+            ImmutableList<ChildNumber> childNumberPath) throws HDDerivationException {
         BigInteger priv = new BigInteger(1, privKeyBytes);
         assertNonZero(priv, "Generated master key is invalid.");
         assertLessThanN(priv, "Generated master key is invalid.");
-        return new DeterministicKey(ImmutableList.<ChildNumber>of(), chainCode, priv, null);
+        return new DeterministicKey(childNumberPath, chainCode, priv, null);
     }
 
     public static DeterministicKey createMasterPubKeyFromBytes(byte[] pubKeyBytes, byte[] chainCode) {
@@ -176,7 +186,7 @@ public final class HDKeyDerivation {
     }
 
     public static RawKeyBytes deriveChildKeyBytesFromPublic(DeterministicKey parent, ChildNumber childNumber, PublicDeriveMode mode) throws HDDerivationException {
-        checkArgument(!childNumber.isHardened(), "Can't use private derivation with public keys only.");
+        checkArgument(!childNumber.isHardened(), "Hardened derivation is unsupported (%s).", childNumber);
         byte[] parentPublicKey = parent.getPubKeyPoint().getEncoded(true);
         checkState(parentPublicKey.length == 33, "Parent pubkey must be 33 bytes, but is " + parentPublicKey.length);
         ByteBuffer data = ByteBuffer.allocate(37);

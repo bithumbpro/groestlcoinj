@@ -24,12 +24,14 @@ import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import org.bitcoinj.core.*;
 import org.bitcoinj.crypto.TransactionSignature;
 import org.bitcoinj.script.Script;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nullable;
 
@@ -116,7 +118,7 @@ public abstract class PaymentChannelServerState {
 
     PaymentChannelServerState(StoredServerChannel storedServerChannel, Wallet wallet, TransactionBroadcaster broadcaster) throws VerificationException {
         synchronized (storedServerChannel) {
-            this.stateMachine = new StateMachine<State>(State.UNINITIALISED, getStateTransitions());
+            this.stateMachine = new StateMachine<>(State.UNINITIALISED, getStateTransitions());
             this.wallet = checkNotNull(wallet);
             this.broadcaster = checkNotNull(broadcaster);
             this.contract = checkNotNull(storedServerChannel.contract);
@@ -140,7 +142,7 @@ public abstract class PaymentChannelServerState {
      * @param minExpireTime The earliest time at which the client can claim the refund transaction (UNIX timestamp of block)
      */
     public PaymentChannelServerState(TransactionBroadcaster broadcaster, Wallet wallet, ECKey serverKey, long minExpireTime) {
-        this.stateMachine = new StateMachine<State>(State.UNINITIALISED, getStateTransitions());
+        this.stateMachine = new StateMachine<>(State.UNINITIALISED, getStateTransitions());
         this.serverKey = checkNotNull(serverKey);
         this.wallet = checkNotNull(wallet);
         this.broadcaster = checkNotNull(broadcaster);
@@ -193,7 +195,7 @@ public abstract class PaymentChannelServerState {
         final SettableFuture<PaymentChannelServerState> future = SettableFuture.create();
         Futures.addCallback(broadcaster.broadcastTransaction(contract).future(), new FutureCallback<Transaction>() {
             @Override public void onSuccess(Transaction transaction) {
-                log.info("Successfully broadcast multisig contract {}. Channel now open.", transaction.getHashAsString());
+                log.info("Successfully broadcast multisig contract {}. Channel now open.", transaction.getTxId());
                 try {
                     // Manually add the contract to the wallet, overriding the isRelevant checks so we can track
                     // it and check for double-spends later
@@ -211,7 +213,7 @@ public abstract class PaymentChannelServerState {
                 stateMachine.transition(State.ERROR);
                 future.setException(throwable);
             }
-        });
+        }, MoreExecutors.directExecutor());
         return future;
     }
 
@@ -219,14 +221,14 @@ public abstract class PaymentChannelServerState {
     protected synchronized SendRequest makeUnsignedChannelContract(Coin valueToMe) {
         Transaction tx = new Transaction(wallet.getParams());
         if (!getTotalValue().subtract(valueToMe).equals(Coin.ZERO)) {
-            tx.addOutput(getTotalValue().subtract(valueToMe), getClientKey().toAddress(wallet.getParams()));
+            tx.addOutput(getTotalValue().subtract(valueToMe), LegacyAddress.fromKey(wallet.getParams(), getClientKey()));
         }
         tx.addInput(contract.getOutput(0));
         return SendRequest.forTx(tx);
     }
 
     /**
-     * Called when the client provides us with a new signature and wishes to increment total payment by size.		+
+     * Called when the client provides us with a new signature and wishes to increment total payment by size.
      * Verifies the provided signature and only updates values if everything checks out.
      * If the new refundSize is not the lowest we have seen, it is simply ignored.
      *
@@ -235,11 +237,13 @@ public abstract class PaymentChannelServerState {
      * @throws VerificationException If the signature does not verify or size is out of range (incl being rejected by the network as dust).
      * @return true if there is more value left on the channel, false if it is now fully used up.
      */
-    public synchronized boolean incrementPayment(Coin refundSize, byte[] signatureBytes) throws VerificationException, ValueOutOfRangeException, InsufficientMoneyException {
+    public synchronized boolean incrementPayment(Coin refundSize, byte[] signatureBytes)
+            throws SignatureDecodeException, VerificationException, ValueOutOfRangeException,
+            InsufficientMoneyException {
         stateMachine.checkState(State.READY);
         checkNotNull(refundSize);
         checkNotNull(signatureBytes);
-        TransactionSignature signature = TransactionSignature.decodeFromBitcoin(signatureBytes, true);
+        TransactionSignature signature = TransactionSignature.decodeFromBitcoin(signatureBytes, true, false);
         // We allow snapping to zero for the payment amount because it's treated specially later, but not less than
         // the dust level because that would prevent the transaction from being relayed/mined.
         final boolean fullyUsedUp = refundSize.equals(Coin.ZERO);
@@ -257,8 +261,8 @@ public abstract class PaymentChannelServerState {
         // Get the wallet's copy of the contract (ie with confidence information), if this is null, the wallet
         // was not connected to the peergroup when the contract was broadcast (which may cause issues down the road, and
         // disables our double-spend check next)
-        Transaction walletContract = wallet.getTransaction(contract.getHash());
-        checkNotNull(walletContract, "Wallet did not contain multisig contract {} after state was marked READY", contract.getHash());
+        Transaction walletContract = wallet.getTransaction(contract.getTxId());
+        checkNotNull(walletContract, "Wallet did not contain multisig contract {} after state was marked READY", contract.getTxId());
 
         // Note that we check for DEAD state here, but this test is essentially useless in production because we will
         // miss most double-spends due to bloom filtering right now anyway. This will eventually fixed by network-wide
@@ -300,7 +304,20 @@ public abstract class PaymentChannelServerState {
      *         will never complete, a timeout should be used.
      * @throws InsufficientMoneyException If the payment tx would have cost more in fees to spend than it is worth.
      */
-    public abstract ListenableFuture<Transaction> close() throws InsufficientMoneyException;
+    public ListenableFuture<Transaction> close() throws InsufficientMoneyException {
+        return close(null);
+    }
+
+    /**
+     * <p>Closes this channel and broadcasts the highest value payment transaction on the network.</p>
+     *
+     * @param userKey The AES key to use for decryption of the private key. If null then no decryption is required.
+     * @return a future which completes when the provided multisig contract successfully broadcasts, or throws if the
+     *         broadcast fails for some reason. Note that if the network simply rejects the transaction, this future
+     *         will never complete, a timeout should be used.
+     * @throws InsufficientMoneyException If the payment tx would have cost more in fees to spend than it is worth.
+     */
+    public abstract ListenableFuture<Transaction> close(@Nullable KeyParameter userKey) throws InsufficientMoneyException;
 
     /**
      * Gets the highest payment to ourselves (which we will receive on settle(), not including fees)
@@ -351,7 +368,7 @@ public abstract class PaymentChannelServerState {
         if (storedServerChannel != null)
             return;
 
-        log.info("Storing state with contract hash {}.", getContract().getHash());
+        log.info("Storing state with contract hash {}.", getContract().getTxId());
         StoredPaymentChannelServerStates channels = (StoredPaymentChannelServerStates)
                 wallet.addOrGetExistingExtension(new StoredPaymentChannelServerStates(wallet, broadcaster));
         storedServerChannel = new StoredServerChannel(this, getMajorVersion(), getContract(), getClientOutput(), getExpiryTime(), serverKey, getClientKey(), bestValueToMe, bestValueSignature);
@@ -372,7 +389,7 @@ public abstract class PaymentChannelServerState {
     /**
      * Gets the script that signatures should sign against. This is never a P2SH
      * script, rather the script that would be inside a P2SH script.
-     * @return
+     * @return the script that signatures should sign against.
      */
     protected abstract Script getSignedScript();
 
