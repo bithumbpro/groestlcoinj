@@ -398,7 +398,7 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Key Management
 
@@ -999,13 +999,11 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public boolean isPubKeyHashMine(byte[] pubkeyHash) {
         return findKeyFromPubHash(pubkeyHash) != null;
     }
 
-    /** {@inheritDoc} */
     @Override
     public boolean isWatchedScript(Script script) {
         keyChainGroupLock.lock();
@@ -1031,7 +1029,6 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public boolean isPubKeyMine(byte[] pubkey) {
         return findKeyFromPubKey(pubkey) != null;
@@ -1052,7 +1049,6 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public boolean isPayToScriptHashMine(byte[] payToScriptHash) {
         return findRedeemDataFromScriptHash(payToScriptHash) != null;
@@ -1275,7 +1271,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Serialization support
 
@@ -1613,7 +1609,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Inbound transaction reception and processing
 
@@ -2501,7 +2497,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Event listeners
 
@@ -2802,7 +2798,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Vending transactions and other internal state
 
@@ -2947,7 +2943,6 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /** {@inheritDoc} */
     @Override
     public Map<Sha256Hash, Transaction> getTransactionPool(Pool pool) {
         lock.lock();
@@ -3435,7 +3430,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Balance and balance futures
 
@@ -3677,7 +3672,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Creating and sending transactions
 
@@ -4304,8 +4299,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
-
+    // ***************************************************************************************************************
     /**
      * A custom {@link TransactionOutput} that is free standing. This contains all the information
      * required for spending without actually having all the linked data (i.e parent tx).
@@ -4355,10 +4349,7 @@ public class Wallet extends BaseTaggableObject
         }
     }
 
-    /******************************************************************************************************************/
-
-
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     private static class TxOffsetPair implements Comparable<TxOffsetPair> {
         public final Transaction tx;
@@ -4709,7 +4700,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Extensions to the wallet format.
 
@@ -4830,8 +4821,7 @@ public class Wallet extends BaseTaggableObject
         TransactionOutput selection2Change = null;
         CoinSelection selection1 = null;
         TransactionOutput selection1Change = null;
-        // We keep track of the last size of the transaction we calculated but only if the act of adding inputs and
-        // change resulted in the size crossing a 1000 byte boundary. Otherwise it stays at zero.
+        // We keep track of the last size of the transaction we calculated.
         int lastCalculatedSize = 0;
         Coin valueNeeded, valueMissing = null;
         while (true) {
@@ -5023,7 +5013,7 @@ public class Wallet extends BaseTaggableObject
 
     //endregion
 
-    /******************************************************************************************************************/
+    // ***************************************************************************************************************
 
     //region Wallet maintenance transactions
 

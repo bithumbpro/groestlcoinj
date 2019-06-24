@@ -67,6 +67,7 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
         dnsSeeds = CoinDefinition.testnetDnsSeeds;
 
 
+        addrSeeds = null;
         bip32HeaderPub = 0x043587CF;
         bip32HeaderPriv = 0x04358394;
 
