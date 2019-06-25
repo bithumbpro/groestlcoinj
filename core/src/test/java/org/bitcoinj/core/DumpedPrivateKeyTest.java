@@ -37,12 +37,12 @@ public class DumpedPrivateKeyTest {
 
     @Test
     public void checkNetwork() throws Exception {
-        DumpedPrivateKey.fromBase58(MAINNET, "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5ubuMrk");
+        DumpedPrivateKey.fromBase58(MAINNET, "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5vDN6zr");
     }
 
     @Test(expected = AddressFormatException.WrongNetwork.class)
     public void checkNetworkWrong() throws Exception {
-        DumpedPrivateKey.fromBase58(TESTNET, "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5ubuMrk");
+        DumpedPrivateKey.fromBase58(TESTNET, "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5vDN6zr");
     }
 
     @Test
@@ -68,7 +68,7 @@ public class DumpedPrivateKeyTest {
 
     @Test
     public void roundtripBase58() throws Exception {
-        String base58 = "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5ubuMrk"; // 32-bytes key
+        String base58 = "5HtUCLMFWNueqN9unpgX2DzjMg6SDNZyKRb8s3LJgpFg5vDN6zr"; // 32-bytes key
         DumpedPrivateKey dumpedPrivateKey = DumpedPrivateKey.fromBase58(null, base58);
         assertFalse(dumpedPrivateKey.isPubKeyCompressed());
         assertEquals(base58, dumpedPrivateKey.toBase58());
@@ -76,7 +76,7 @@ public class DumpedPrivateKeyTest {
 
     @Test
     public void roundtripBase58_compressed() throws Exception {
-        String base58 = "cSthBXr8YQAexpKeh22LB9PdextVE1UJeahmyns5LzcmMDSy59L4"; // 33-bytes, compressed == true
+        String base58 = "cSthBXr8YQAexpKeh22LB9PdextVE1UJeahmyns5LzcmMDR4uYzy"; // 33-bytes, compressed == true
         DumpedPrivateKey dumpedPrivateKey = DumpedPrivateKey.fromBase58(null, base58);
         assertTrue(dumpedPrivateKey.isPubKeyCompressed());
         assertEquals(base58, dumpedPrivateKey.toBase58());
@@ -84,7 +84,7 @@ public class DumpedPrivateKeyTest {
 
     @Test(expected = AddressFormatException.class)
     public void roundtripBase58_invalidCompressed() {
-        String base58 = "5Kg5shEQWrf1TojaHTdc2kLuz5Mfh4uvp3cYu8uJHaHgfTGUbTD"; // 32-bytes key
+        String base58 = "5Kg5shEQWrf1TojaHTdc2kLuz5Mfh4uvp3cYu8uJHaHgfYV29Sb"; // 32-bytes key
         byte[] bytes = Base58.decodeChecked(base58);
         bytes = Arrays.copyOf(bytes, bytes.length + 1); // append a "compress" byte
         bytes[bytes.length - 1] = 0; // set it to false

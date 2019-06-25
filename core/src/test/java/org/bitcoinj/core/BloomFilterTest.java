@@ -72,10 +72,10 @@ public class BloomFilterTest {
     public void walletTest() throws Exception {
         Context.propagate(new Context(MAINNET));
 
-        DumpedPrivateKey privKey = DumpedPrivateKey.fromBase58(MAINNET, "5Kg1gnAjaLfKiwhhPpGS3QfRg2m6awQvaj98JCZBZQ5SuS2F15C");
+        DumpedPrivateKey privKey = DumpedPrivateKey.fromBase58(MAINNET, "5Kg1gnAjaLfKiwhhPpGS3QfRg2m6awQvaj98JCZBZQ5SuT2mcX7");
 
         Address addr = LegacyAddress.fromKey(MAINNET, privKey.getKey());
-        assertTrue(addr.toString().equals("17Wx1GQfyPTNWpQMHrTwRSMTCAonSiZx9e"));
+        assertTrue(addr.toString().equals("FbgfTB93Xt8uxRRUAxTQsx9mrL5jzdmWCw"));
 
         KeyChainGroup group = KeyChainGroup.builder(MAINNET).build();
         // Add a random key which happens to have been used in a recent generation
