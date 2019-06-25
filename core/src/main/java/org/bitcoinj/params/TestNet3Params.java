@@ -49,6 +49,7 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
         port = 17777;
         addressHeader = CoinDefinition.testnetAddressHeader;
         p2shHeader = CoinDefinition.testnetp2shHeader;
+        segwitAddressHrp = "tgrs";
         dumpedPrivateKeyHeader = 128 + CoinDefinition.testnetAddressHeader;
         genesisBlock.setTime(CoinDefinition.testnetGenesisBlockTime);
         genesisBlock.setDifficultyTarget(CoinDefinition.testnetGenesisBlockDifficultyTarget);
@@ -94,33 +95,13 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
     public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
         final BlockStore blockStore) throws VerificationException, BlockStoreException {
 
-        if (!isDifficultyTransitionPoint(storedPrev.getHeight())) {
-            Block prev = storedPrev.getHeader();
 
-            // After 15th February 2012 the rules on the testnet change to avoid people running up the difficulty
-            // and then leaving, making it too hard to mine a block. On non-difficulty transition points, easy
-            // blocks are allowed if there has been a span of 20 minutes without one.
-            final long timeDelta = nextBlock.getTimeSeconds() - prev.getTimeSeconds();
-            // There is an integer underflow bug in bitcoin-qt that means mindiff blocks are accepted when time
-            // goes backwards.
-            if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 2) {
-                // Walk backwards until we find a block that doesn't have the easiest proof of work, then check
-                // that difficulty is equal to that one.
-                StoredBlock cursor = storedPrev;
-                while (!cursor.getHeader().equals(getGenesisBlock()) &&
-                           cursor.getHeight() % getInterval() != 0 &&
-                           cursor.getHeader().getDifficultyTargetAsInteger().equals(getMaxTarget()))
-                        cursor = cursor.getPrev(blockStore);
-                BigInteger cursorTarget = cursor.getHeader().getDifficultyTargetAsInteger();
-                BigInteger newTarget = nextBlock.getDifficultyTargetAsInteger();
-                if (!cursorTarget.equals(newTarget))
-                        throw new VerificationException("Testnet block transition that is not allowed: " +
-                        Long.toHexString(cursor.getHeader().getDifficultyTarget()) + " vs " +
-                        Long.toHexString(nextBlock.getDifficultyTarget()));
-            }
-        } else {
-            if(storedPrev.getHeight() >= 99999)
-                super.checkDifficultyTransitions(storedPrev, nextBlock, blockStore);
+        if (nextBlock.getTimeSeconds() > (storedPrev.getHeader().getTimeSeconds() + NetworkParameters.TARGET_SPACING*2)) {
+            verifyDifficulty(nextBlock.getDifficultyTargetAsInteger(), storedPrev, nextBlock);
+            return;
         }
+
+        else if(storedPrev.getHeight() >= 99999)
+            super.checkDifficultyTransitions(storedPrev, nextBlock, blockStore);
     }
 }
