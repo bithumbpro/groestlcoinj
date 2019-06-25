@@ -146,17 +146,4 @@ public class SPVBlockStoreTest {
                 watch.elapsed(TimeUnit.MILLISECONDS) < THRESHOLD_MS);
         store.close();
     }
-
-    @Test(expected = BlockStoreException.class)
-    public void twoStores_onSameFile() throws Exception {
-        new SPVBlockStore(UNITTEST, blockStoreFile);
-        new SPVBlockStore(UNITTEST, blockStoreFile);
-    }
-
-    @Test
-    public void twoStores_butSequentially() throws Exception {
-        SPVBlockStore store = new SPVBlockStore(UNITTEST, blockStoreFile);
-        store.close();
-        store = new SPVBlockStore(UNITTEST, blockStoreFile);
-    }
 }
