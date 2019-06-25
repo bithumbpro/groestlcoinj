@@ -3070,13 +3070,8 @@ public class WalletTest extends TestWithWallet {
         ECKey usedKey = wallet.findKeyFromPubKeyHash(output.getHash(), output.getOutputScriptType());
         assertEquals(goodKey.getCreationTimeSeconds(), usedKey.getCreationTimeSeconds());
         assertEquals(goodKey.getCreationTimeSeconds(), wallet.freshReceiveKey().getCreationTimeSeconds());
-<<<<<<< HEAD
-        assertEquals("mrM3TpCnav5YQuVA1xLercCGJH4DXfomn4", usedKey.toAddress(PARAMS).toString());
-        DeterministicKeyChain c = fChains.get().get(1);
-=======
         assertEquals("mrM3TpCnav5YQuVA1xLercCGJH4DXujMtv", LegacyAddress.fromKey(UNITTEST, usedKey).toString());
         DeterministicKeyChain c = kcg.getDeterministicKeyChains().get(1);
->>>>>>> ea3a70e85e5bbc0392af52084137715a70ed022f
         assertEquals(c.getEarliestKeyCreationTime(), goodKey.getCreationTimeSeconds());
         assertEquals(2, kcg.getDeterministicKeyChains().size());
 
