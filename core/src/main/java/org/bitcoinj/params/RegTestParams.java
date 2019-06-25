@@ -19,6 +19,7 @@ package org.bitcoinj.params;
 
 import org.bitcoinj.core.Block;
 import org.bitcoinj.core.CoinDefinition;
+import org.bitcoinj.core.Sha256Hash;
 
 import java.math.BigInteger;
 
@@ -39,12 +40,14 @@ public class RegTestParams extends AbstractBitcoinNetParams {
         targetTimespan = TARGET_TIMESPAN;
         dumpedPrivateKeyHeader = 128 + CoinDefinition.testnetAddressHeader;
         segwitAddressHrp = "grsrt";
-        genesisBlock.setTime(1296688602L);
-        genesisBlock.setDifficultyTarget(0x1d07fff8L);
-        genesisBlock.setNonce(384568319);
+        genesisBlock.setTime(CoinDefinition.testnetGenesisBlockTime);
+        genesisBlock.setDifficultyTarget(CoinDefinition.testnetGenesisBlockDifficultyTarget);
+        genesisBlock.setNonce(CoinDefinition.testnetGenesisBlockNonce);
+        genesisBlock.setVersion(3);
         spendableCoinbaseDepth = CoinDefinition.spendableCoinbaseDepth;
+        genesisBlock.setMerkleRoot(Sha256Hash.wrap("3ce968df58f9c8a752306c4b7264afab93149dbc578bd08a42c446caaa6628bb"));
         String genesisHash = genesisBlock.getHashAsString();
-        checkState(genesisHash.equals("00000007199508e34a9ff81e6ec0c477a4cccff2a4767a8eee39c11db367b008"));
+        checkState(genesisHash.equals("000000ffbb50fc9898cdd36ec163e6ba23230164c0052a28876255b7dcf2cd36"));
         dnsSeeds = null;
         addrSeeds = null;
         bip32HeaderP2PKHpub = 0x043587cf; // The 4 byte header that serializes in base58 to "tpub".

@@ -17,15 +17,11 @@
 
 package org.bitcoinj.params;
 
-import org.bitcoinj.core.CoinDefinition;
+import org.bitcoinj.core.*;
+
 import java.math.BigInteger;
 import java.util.Date;
 
-import org.bitcoinj.core.Block;
-import org.bitcoinj.core.NetworkParameters;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Utils;
-import org.bitcoinj.core.VerificationException;
 import org.bitcoinj.store.BlockStore;
 import org.bitcoinj.store.BlockStoreException;
 
@@ -61,7 +57,8 @@ public class TestNet3Params extends AbstractBitcoinNetParams {
         spendableCoinbaseDepth = 100;
 
         subsidyDecreaseBlockCount = CoinDefinition.subsidyDecreaseBlockCount;
-         String genesisHash = genesisBlock.getHashAsString();
+        genesisBlock.setMerkleRoot(Sha256Hash.wrap("3ce968df58f9c8a752306c4b7264afab93149dbc578bd08a42c446caaa6628bb"));
+        String genesisHash = genesisBlock.getHashAsString();
 
         if(CoinDefinition.supportsTestNet)
             checkState(genesisHash.equals(CoinDefinition.testnetGenesisHash));
