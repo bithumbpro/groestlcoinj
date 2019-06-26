@@ -31,12 +31,12 @@ import static org.junit.Assert.*;
 
 public class BitcoinSerializerTest {
     private static final NetworkParameters MAINNET = MainNetParams.get();
-    private static final byte[] ADDRESS_MESSAGE_BYTES = HEX.decode("f9beb4d96164647200000000000000001f000000" +
-            "ed52399b01e215104d010000000000000000000000000000000000ffff0a000001208d");
+    private static final byte[] ADDRESS_MESSAGE_BYTES = HEX.decode("f9beb4d46164647200000000000000001f000000" +
+            "863bc3aa01e215104d010000000000000000000000000000000000ffff0a000001208d");
 
     private static final byte[] TRANSACTION_MESSAGE_BYTES = HEX.withSeparator(" ", 2).decode(
-            "f9 be b4 d9 74 78 00 00  00 00 00 00 00 00 00 00" +
-            "02 01 00 00 e2 93 cd be  01 00 00 00 01 6d bd db" +
+            "f9 be b4 d4 74 78 00 00  00 00 00 00 00 00 00 00" +
+            "02 01 00 00 39 57 45 c3  01 00 00 00 01 6d bd db" +
             "08 5b 1d 8a f7 51 84 f0  bc 01 fa d5 8d 12 66 e9" +
             "b6 3b 50 88 19 90 e4 b4  0d 6a ee 36 29 00 00 00" +
             "00 8b 48 30 45 02 21 00  f3 58 1e 19 72 ae 8a c7" +
@@ -137,8 +137,8 @@ public class BitcoinSerializerTest {
     public void testHeaders1() throws Exception {
         MessageSerializer serializer = MAINNET.getDefaultSerializer();
 
-        byte[] headersMessageBytes = HEX.decode("f9beb4d9686561" +
-                "646572730000000000520000005d4fab8101010000006fe28c0ab6f1b372c1a6a246ae6" +
+        byte[] headersMessageBytes = HEX.decode("f9beb4d4686561" +
+                "646572730000000000520000002a86d69d01010000006fe28c0ab6f1b372c1a6a246ae6" +
                 "3f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677b" +
                 "a1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e3629900");
         HeadersMessage headersMessage = (HeadersMessage) serializer.deserialize(ByteBuffer.wrap(headersMessageBytes));
@@ -146,7 +146,7 @@ public class BitcoinSerializerTest {
         // The first block after the genesis
         // http://blockexplorer.com/b/1
         Block block = headersMessage.getBlockHeaders().get(0);
-        assertEquals("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", block.getHashAsString());
+        assertEquals("23668c2a3bec619e043686da1f3e7a1ae8fa51e76d01f9b9c1ecce2c1e7fb928", block.getHashAsString());
         assertNotNull(block.transactions);
         assertEquals("0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098", Utils.HEX.encode(block.getMerkleRoot().getBytes()));
 
@@ -163,8 +163,8 @@ public class BitcoinSerializerTest {
     public void testHeaders2() throws Exception {
         MessageSerializer serializer = MAINNET.getDefaultSerializer();
 
-        byte[] headersMessageBytes = HEX.decode("f9beb4d96865616465" +
-                "72730000000000e701000085acd4ea06010000006fe28c0ab6f1b372c1a6a246ae63f74f931e" +
+        byte[] headersMessageBytes = HEX.decode("f9beb4d46865616465" +
+                "72730000000000e701000078f0576e06010000006fe28c0ab6f1b372c1a6a246ae63f74f931e" +
                 "8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1c" +
                 "db606e857233e0e61bc6649ffff001d01e3629900010000004860eb18bf1b1620e37e9490fc8a" +
                 "427514416fd75159ab86688e9a8300000000d5fdcc541e25de1c7a5addedf24858b8bb665c9f36" +
@@ -184,14 +184,14 @@ public class BitcoinSerializerTest {
         // index 0 block is the number 1 block in the block chain
         // http://blockexplorer.com/b/1
         Block zeroBlock = headersMessage.getBlockHeaders().get(0);
-        assertEquals("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+        assertEquals("23668c2a3bec619e043686da1f3e7a1ae8fa51e76d01f9b9c1ecce2c1e7fb928",
                 zeroBlock.getHashAsString());
         assertEquals(2573394689L, zeroBlock.getNonce());
 
         // index 3 block is the number 4 block in the block chain
         // http://blockexplorer.com/b/4
         Block thirdBlock = headersMessage.getBlockHeaders().get(3);
-        assertEquals("000000004ebadb55ee9096c9a2f8880e09da59c0d68b1c228da88e48844a1485",
+        assertEquals("b82180d680961412ae8cd380c752266211b96cb7f08dcfc441e64098a3c9e4b2",
                 thirdBlock.getHashAsString());
         assertEquals(2850094635L, thirdBlock.getNonce());
 
