@@ -616,7 +616,7 @@ public class Block extends Message {
             if (witnessReserved.length != 32)
                 throw new VerificationException("Coinbase witness reserved invalid: length");
 
-            Sha256Hash witnessRootHash = Sha256Hash.twiceOf(getWitnessRoot().getReversedBytes(), witnessReserved);
+            Sha256Hash witnessRootHash = Sha256Hash.onceOf(getWitnessRoot().getReversedBytes(), witnessReserved);
             if (!witnessRootHash.equals(witnessCommitment))
                 throw new VerificationException("Witness merkle root invalid. Expected " + witnessCommitment.toString()
                         + " but got " + witnessRootHash.toString());
