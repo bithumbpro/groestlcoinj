@@ -871,7 +871,7 @@ public class ECKey implements EncryptableItem {
      */
     public String signMessage(String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
         byte[] data = formatMessageForSigning(message);
-        Sha256Hash hash = Sha256Hash.twiceOf(data);
+        Sha256Hash hash = Sha256Hash.of(data);
         ECDSASignature sig = sign(hash, aesKey);
         byte recId = findRecoveryId(hash, sig);
         int headerByte = recId + 27 + (isCompressed() ? 4 : 0);
