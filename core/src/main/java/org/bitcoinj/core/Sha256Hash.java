@@ -119,6 +119,9 @@ public class Sha256Hash implements Serializable, Comparable<Sha256Hash> {
         return wrap(hashTwice(content1, content2));
     }
 
+    public static Sha256Hash onceOf(byte[] content1, byte[] content2) {
+        return wrap(hashOnce(content1, content2));
+    }
     /**
      * Creates a new instance containing the calculated (one-time) hash of the given file's contents.
      *
@@ -199,6 +202,16 @@ public class Sha256Hash implements Serializable, Comparable<Sha256Hash> {
         return digest.digest(digest.digest());
     }
 
+    /**
+     * Calculates the hash of hash on the given chunks of bytes. This is equivalent to concatenating the two
+     * chunks and then passing the result to {@link #onceOf(byte[])}}.
+     */
+    public static byte[] hashOnce(byte[] input1, byte[] input2) {
+        MessageDigest digest = newDigest();
+        digest.update(input1);
+        digest.update(input2);
+        return digest.digest();
+    }
     /**
      * Calculates the SHA-256 hash of the given byte range,
      * and then hashes the resulting hash again.
