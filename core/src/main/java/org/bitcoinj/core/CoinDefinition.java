@@ -1,8 +1,5 @@
 package org.bitcoinj.core;
 
-import com.hashengineering.crypto.blockexplorer.BlockExplorer;
-import com.hashengineering.crypto.blockexplorer.BlockExplorers;
-import com.hashengineering.crypto.blockexplorer.CryptoIDExplorer;
 import org.bitcoinj.net.discovery.HttpDiscovery;
 
 import java.math.BigInteger;
@@ -31,32 +28,7 @@ public class CoinDefinition {
 
     public static String lowerCaseCoinName() { return coinName.toLowerCase(); }
 
-    static final BlockExplorers blockExplorers = new BlockExplorers();
-    static public final BlockExplorer defaultExplorer;
-    static public final BlockExplorer unspentExplorer;
-    static {
-        blockExplorers.add(new CryptoIDExplorer("https://chainz.cryptoid.info/grs/"));
-
-        defaultExplorer = blockExplorers.getExplorer("https://chainz.cryptoid.info/grs/");
-        unspentExplorer = blockExplorers.getExplorer("https://chainz.cryptoid.info/grs/");
-    }
-
-    public static final String BLOCKEXPLORER_BASE_URL_PROD = "https://chainz.cryptoid.info/grs/";
-    public static final String BLOCKEXPLORER_ADDRESS_PATH = "address.dws?";
-    public static final String BLOCKEXPLORER_TRANSACTION_PATH = "tx.dws?";
-    public static final String BLOCKEXPLORER_BLOCK_PATH = "block.dws?";
-    public static final String BLOCKEXPLORER_BASE_URL_TEST = BLOCKEXPLORER_BASE_URL_PROD;
-
     public static final String DONATION_ADDRESS = "FkknEYnex1MeZyPRnEebFK5ZBHHsFZbvaf";  //HashEngineering donation GRS address
-
-    public static final String UNSPENT_API_URL = "https://chainz.cryptoid.info/grs/api.dws?q=unspent";
-    public enum UnspentAPIType {
-        BitEasy,
-        Blockr,
-        Abe,
-        Cryptoid,
-    };
-    public static final UnspentAPIType UnspentAPI = UnspentAPIType.Cryptoid;
 
     public static boolean checkpointFileSupport = true;
     public static int checkpointDaysBack = 21;
