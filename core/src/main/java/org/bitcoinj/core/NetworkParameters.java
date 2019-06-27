@@ -507,7 +507,7 @@ public abstract class NetworkParameters {
         BLOOM_FILTER(70000), // BIP37
         BLOOM_FILTER_BIP111(70011), // BIP111
         WITNESS_VERSION(70012),
-        CURRENT(CoinDefinition.PROTOCOL_VERSION);
+        CURRENT(70012);
 
         private final int bitcoinProtocol;
 
