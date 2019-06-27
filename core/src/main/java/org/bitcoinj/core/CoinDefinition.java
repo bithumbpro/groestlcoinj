@@ -121,6 +121,10 @@ public class CoinDefinition {
 
     //net.cpp strDNSSeed
     static public String[] dnsSeeds = new String[] {
+            "dnsseed1.groestlcoin.org",
+            "dnsseed2.groestlcoin.org",
+            "dnsseed3.groestlcoin.org",
+            "dnsseed4.groestlcoin.org",
             "groestlsight.groestlcoin.org",
             "groestlcoin.org",
             "electrum1.groestlcoin.org",
@@ -259,6 +263,8 @@ public class CoinDefinition {
     public static BigInteger proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);  //main.cpp bnProofOfWorkLimit (~uint256(0) >> 20); // groestlcoin: starting difficulty is 1 / 2^12
 
     static public String[] testnetDnsSeeds = new String[] {
+            "testnet-seed1.groestlcoin.org",
+            "testnet-seed2.groestlcoin.org",
             "testnet1.groestlcoin.org",
             "testnet2.groestlcoin.org"
     };
