@@ -55,7 +55,14 @@ public class BIP38PrivateKey extends PrefixedChecksummedBytes {
      *             if the given base58 doesn't parse or the checksum is invalid
      */
     public static BIP38PrivateKey fromBase58(NetworkParameters params, String base58) throws AddressFormatException {
-        byte[] versionAndDataBytes = Base58.decodeChecked(base58);
+        byte[] versionAndDataBytes = null;
+        try {
+            versionAndDataBytes = Base58.decodeChecked(base58);
+        } catch (AddressFormatException x) {
+            //allow BIP38 addresses that use SHA256D checksums
+            //The main GRS paperwallet uses SHA256D instead of Groestl
+            versionAndDataBytes = Base58.decodeCheckedSha256D(base58);
+        }
         int version = versionAndDataBytes[0] & 0xFF;
         byte[] bytes = Arrays.copyOfRange(versionAndDataBytes, 1, versionAndDataBytes.length);
 
