@@ -84,6 +84,7 @@ public class Block extends Message {
     public static final int BLOCK_HEIGHT_GENESIS = 0;
 
     public static final long BLOCK_VERSION_GENESIS = CoinDefinition.genesisBlockVersion;
+    public static final long BLOCK_VERSION_GENESIS_TESTNET = 3;
 
     /** Block version introduced in BIP 34: Height in coinbase */
     public static final long BLOCK_VERSION_BIP34 = 2;

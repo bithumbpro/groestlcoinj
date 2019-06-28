@@ -20,6 +20,8 @@ package org.bitcoinj.params;
 import org.bitcoinj.core.CoinDefinition;
 
 import org.bitcoinj.core.*;
+import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
 
 import java.math.BigInteger;
 
@@ -38,7 +40,7 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
         packetMagic = 0x0b110907;
         addressHeader = CoinDefinition.testnetAddressHeader;
         p2shHeader = CoinDefinition.testnetp2shHeader;
-        maxTarget = new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+        maxTarget = new BigInteger("7fffff0000000000000000000000000000000000000000000000000000000000", 16);
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
         //genesisBlock.solve();
@@ -72,5 +74,12 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
     @Override
     public String getPaymentProtocolId() {
         return "unittest";
+    }
+
+    @Override
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+                                           final BlockStore blockStore) throws VerificationException, BlockStoreException {
+
+        checkDifficultyTransitions_btc(storedPrev, nextBlock, blockStore);
     }
 }

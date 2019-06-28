@@ -21,6 +21,7 @@ import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.params.TestNet3Params;
 import org.bitcoinj.params.UnitTestParams;
 import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.store.MemoryBlockStore;
 import org.bitcoinj.testing.FakeTxBuilder;
 import org.bitcoinj.utils.BriefLogFormatter;
@@ -62,6 +63,11 @@ public class BlockChainTest {
     private static class TweakableTestNet3Params extends TestNet3Params {
         public void setMaxTarget(BigInteger limit) {
             maxTarget = limit;
+        }
+
+        @Override
+        public void checkDifficultyTransitions(StoredBlock storedPrev, Block nextBlock, BlockStore blockStore) throws VerificationException, BlockStoreException {
+            checkDifficultyTransitions_btc(storedPrev, nextBlock, blockStore);
         }
     }
     private static final TweakableTestNet3Params TESTNET = new TweakableTestNet3Params();
@@ -188,7 +194,7 @@ public class BlockChainTest {
         // Merkle root can be anything here, doesn't matter.
         bad.setMerkleRoot(Sha256Hash.wrap("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
         // Nonce was just some number that made the hash < difficulty limit set below, it can be anything.
-        bad.setNonce(140548933);
+        bad.setNonce(14054893);
         bad.setTime(1279242649);
         bad.setPrevBlockHash(b2.getHash());
         // We're going to make this block so easy 50% of solutions will pass, and check it gets rejected for having a
@@ -395,25 +401,25 @@ public class BlockChainTest {
 
     // Some blocks from the test net.
     private static Block getBlock2() throws Exception {
-        Block b2 = new Block(TESTNET, Block.BLOCK_VERSION_GENESIS);
-        b2.setMerkleRoot(Sha256Hash.wrap("20222eb90f5895556926c112bb5aa0df4ab5abc3107e21a6950aec3b2e3541e2"));
-        b2.setNonce(875942400L);
-        b2.setTime(1296688946L);
-        b2.setDifficultyTarget(0x1d00ffff);
-        b2.setPrevBlockHash(Sha256Hash.wrap("00000000b873e79784647a6c82962c70d228557d24a747ea4d1b8bbe878e1206"));
-        assertEquals("000000006c02c8ea6e4ff69651f7fcde348fb9d557a06e6957b65552002a7820", b2.getHashAsString());
+        Block b2 = new Block(TESTNET, Block.BLOCK_VERSION_GENESIS_TESTNET);
+        b2.setMerkleRoot(Sha256Hash.wrap("05d269aa0db7953528017a3b3d1d043fbf366b19e66796dac11ec985ff88b980"));
+        b2.setNonce(14198236);
+        b2.setTime(1440017887L);
+        b2.setDifficultyTarget(0x1e00ffff);
+        b2.setPrevBlockHash(Sha256Hash.wrap("000000458242a5d60e943f0a9945c29040b32be35582d1bfd47b5c536f10ac30"));
+        assertEquals("000000c0a0e62b9686bdcc93732927046c6b9270d1a5b56095c85765aa239522", b2.getHashAsString());
         b2.verifyHeader();
         return b2;
     }
 
     private static Block getBlock1() throws Exception {
-        Block b1 = new Block(TESTNET, Block.BLOCK_VERSION_GENESIS);
-        b1.setMerkleRoot(Sha256Hash.wrap("f0315ffc38709d70ad5647e22048358dd3745f3ce3874223c80a7c92fab0c8ba"));
-        b1.setNonce(1924588547);
-        b1.setTime(1296688928);
-        b1.setDifficultyTarget(0x1d00ffff);
-        b1.setPrevBlockHash(Sha256Hash.wrap("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
-        assertEquals("00000000b873e79784647a6c82962c70d228557d24a747ea4d1b8bbe878e1206", b1.getHashAsString());
+        Block b1 = new Block(TESTNET, Block.BLOCK_VERSION_GENESIS_TESTNET);
+        b1.setMerkleRoot(Sha256Hash.wrap("fb6cde21ddf87d46a9816f9a107a05b375ff65d48ba3a6da48d5d48af62ec177"));
+        b1.setNonce(17166854);
+        b1.setTime(1440017729L);
+        b1.setDifficultyTarget(0x1e00ffff);
+        b1.setPrevBlockHash(Sha256Hash.wrap("000000ffbb50fc9898cdd36ec163e6ba23230164c0052a28876255b7dcf2cd36"));
+        assertEquals("000000458242a5d60e943f0a9945c29040b32be35582d1bfd47b5c536f10ac30", b1.getHashAsString());
         b1.verifyHeader();
         return b1;
     }
@@ -423,7 +429,7 @@ public class BlockChainTest {
         BlockChain prod = new BlockChain(new Context(MAINNET), new MemoryBlockStore(MAINNET));
         Date d = prod.estimateBlockTime(200000);
         // The actual date of block 200,000 was 2012-09-22 10:47:00
-        assertEquals(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).parse("2012-10-23T08:35:05.000-0700"), d);
+        assertEquals(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).parse("2018-01-07T08:33:49.000-0800"), d);
     }
 
     @Test
