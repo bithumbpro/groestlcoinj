@@ -42,12 +42,12 @@ public class SegwitAddressTest {
 
     @Test
     public void example_p2wpkh_mainnet() {
-        String bech32 = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
+        String bech32 = "grs1qplqg8dd478f68y2q2u8w650ydc0afqsvlla46k";
 
         SegwitAddress address = SegwitAddress.fromBech32(MAINNET, bech32);
 
         assertEquals(MAINNET, address.params);
-        assertEquals("0014751e76e8199196d454941c45d1b3a323f1433bd6",
+        assertEquals("0fc083b5b5f1d3a39140570eed51e46e1fd4820c",
                 Utils.HEX.encode(ScriptBuilder.createOutputScript(address).getProgram()));
         assertEquals(ScriptType.P2WPKH, address.getOutputScriptType());
         assertEquals(bech32.toLowerCase(Locale.ROOT), address.toBech32());
@@ -70,12 +70,12 @@ public class SegwitAddressTest {
 
     @Test
     public void example_p2wpkh_testnet() {
-        String bech32 = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
+        String bech32 = "tgrs1qy2lg7uqh56q6trvl2eh6qmrlxpzysank09q2xs";
 
         SegwitAddress address = SegwitAddress.fromBech32(TESTNET, bech32);
 
         assertEquals(TESTNET, address.params);
-        assertEquals("0014751e76e8199196d454941c45d1b3a323f1433bd6",
+        assertEquals("22be8f7017a681a58d9f566fa06c7f3044487676",
                 Utils.HEX.encode(ScriptBuilder.createOutputScript(address).getProgram()));
         assertEquals(ScriptType.P2WPKH, address.getOutputScriptType());
         assertEquals(bech32.toLowerCase(Locale.ROOT), address.toBech32());

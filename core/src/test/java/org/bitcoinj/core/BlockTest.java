@@ -72,8 +72,8 @@ public class BlockTest {
         double log2Work = Math.log(work.longValue()) / Math.log(2);
         // This number is printed by Groestlcoin Core at startup as the calculated value of chainWork on testnet:
         // SetBestChain: new best=00000ac5927c594d49cc  height=0  work=1048577
-        assertEquals(20.0000014, log2Work,
-                         0.0000001);
+        assertEquals(24.000022, log2Work,
+                         0.000001);
         //assertEquals(BigInteger.valueOf(1048577L), work);
     }
 
@@ -182,54 +182,45 @@ public class BlockTest {
 
     @Test
     public void testCoinbaseHeightTestnet() throws Exception {
-        // Testnet block 21066 (hash 0000000004053156021d8e42459d284220a7f6e087bf78f30179c3703ca4eefa)
-        // contains a coinbase transaction whose height is two bytes, which is
-        // shorter than we see in most other cases.
-
-        Block block = TESTNET.getDefaultSerializer().makeBlock(
-            ByteStreams.toByteArray(getClass().getResourceAsStream("block_testnet21066.dat")));
+        // Testnet block 21066 (hash 00000066fa4e4b46505aa9cd4155084bc6e9febffd74f5a5f7cb61162e581435)
+        Block block = TESTNET.getDefaultSerializer().makeBlock(Utils.HEX.decode("0000002019226b99556dfdd0a91550fe24516df70d5cc523e24a839f7d73fbfdae000000606aa40f746315f13645ed3eac13d680429288c3a09ba1473dea591f9f4efa7fa8f4a05810ba001e54dd42000101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0c024a5208ca0405e8c698dd96ffffffff01008088880a0000001976a9148b39f3e2e177dbe93a3b70d64c56c29bf2b09cd488ac00000000"));
 
         // Check block.
-        assertEquals("0000000004053156021d8e42459d284220a7f6e087bf78f30179c3703ca4eefa", block.getHashAsString());
+        assertEquals("00000066fa4e4b46505aa9cd4155084bc6e9febffd74f5a5f7cb61162e581435", block.getHashAsString());
         block.verify(21066, EnumSet.of(Block.VerifyFlag.HEIGHT_IN_COINBASE));
 
-        // Testnet block 32768 (hash 000000007590ba495b58338a5806c2b6f10af921a70dbd814e0da3c6957c0c03)
-        // contains a coinbase transaction whose height is three bytes, but could
-        // fit in two bytes. This test primarily ensures script encoding checks
-        // are applied correctly.
-
-        block = TESTNET.getDefaultSerializer().makeBlock(
-            ByteStreams.toByteArray(getClass().getResourceAsStream("block_testnet32768.dat")));
+        // Testnet block 32768 (hash 000000d186adbc83e06badc04bfb612315f647d3c813e045685f93744ed57403)
+        block = TESTNET.getDefaultSerializer().makeBlock(Utils.HEX.decode("000000203f8da72284c697757c6edc4d145a422da1734d099773f89734efd8ba1e000000174f54108528eebba92df75d843b30527f4842d465cda6cb025b3acc73415b8bfe18ac58ffff001e8a3332000101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0d0300800008f374727a98c61008ffffffff0100c0bde6090000001976a9145315037908929d4da5488c75d704700ea17cd57988ac00000000"));
 
         // Check block.
-        assertEquals("000000007590ba495b58338a5806c2b6f10af921a70dbd814e0da3c6957c0c03", block.getHashAsString());
+        assertEquals("000000d186adbc83e06badc04bfb612315f647d3c813e045685f93744ed57403", block.getHashAsString());
         block.verify(32768, EnumSet.of(Block.VerifyFlag.HEIGHT_IN_COINBASE));
     }
 
     @Test
     public void testReceiveCoinbaseTransaction() throws Exception {
-        // Block 169482 (hash 0000000000000756935f1ee9d5987857b604046f846d3df56d024cdb5f368665)
+        // Block 159543 (hash 000000be5b22f03a5857f2f0c516a590809bf1e92d1e67413012ced86f621a61)
         // contains coinbase transactions that are mining pool shares.
         // The private key MINERS_KEY is used to check transactions are received by a wallet correctly.
 
-        // The address for this private key is 1GqtGtn4fctXuKxsVzRPSLmYWN1YioLi9y.
-        final String MINING_PRIVATE_KEY = "5JDxPrBRghF1EvSBjDigywqfmAjpHPmTJxYtQTYJxJRHLLQA4mG";
+        // The address for this private key is n1Ubkt8DnYS2B2H7A9Yd2Co1DW9db7YBcg.
+        final String MINING_PRIVATE_KEY = "cQc7Qzw9PbTQpyUgQ5yNyg5r6dCoQ5VWZgYsoE4MA1axdCK3uGHr";
 
-        final long BLOCK_NONCE = 3973947400L;
-        final Coin BALANCE_AFTER_BLOCK = Coin.valueOf(22223642);
-        Block block169482 = MAINNET.getDefaultSerializer().makeBlock(ByteStreams.toByteArray(getClass().getResourceAsStream("block169482.dat")));
+        final long BLOCK_NONCE = 62649L;
+        final Coin BALANCE_AFTER_BLOCK = Coin.valueOf(2500000000L);
+        Block block159543 = TESTNET.getDefaultSerializer().makeBlock(Utils.HEX.decode("00000020e4325bb9c66658a7d37c973b9418edf75dfc7a044367bdbeec11a7aba7000000e6880700e665fb8cfeff0453fd68723e790a74d97eb89fcdc3add5b77902a2a72daa4259ffff001eb9f4000001010000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff0703376f02025a04ffffffff0200f9029500000000232103cb6140757ce55682b036ff5ff50548cfe4f4224dc41a51e9d6dd19f01db37a6fac0000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90120000000000000000000000000000000000000000000000000000000000000000000000000"));
 
         // Check block.
-        assertNotNull(block169482);
-        block169482.verify(169482, EnumSet.noneOf(Block.VerifyFlag.class));
-        assertEquals(BLOCK_NONCE, block169482.getNonce());
+        assertNotNull(block159543);
+        block159543.verify(159543, EnumSet.noneOf(Block.VerifyFlag.class));
+        assertEquals(BLOCK_NONCE, block159543.getNonce());
 
-        StoredBlock storedBlock = new StoredBlock(block169482, BigInteger.ONE, 169482); // Nonsense work - not used in test.
+        StoredBlock storedBlock = new StoredBlock(block159543, BigInteger.ONE, 159543); // Nonsense work - not used in test.
 
         // Create a wallet contain the miner's key that receives a spend from a coinbase.
-        ECKey miningKey = DumpedPrivateKey.fromBase58(MAINNET, MINING_PRIVATE_KEY).getKey();
+        ECKey miningKey = DumpedPrivateKey.fromBase58(TESTNET, MINING_PRIVATE_KEY).getKey();
         assertNotNull(miningKey);
-        Context context = new Context(MAINNET);
+        Context context = new Context(TESTNET);
         Wallet wallet = new Wallet(context);
         wallet.importKey(miningKey);
 
@@ -237,7 +228,7 @@ public class BlockTest {
         assertEquals(Coin.ZERO, wallet.getBalance());
 
         // Give the wallet the first transaction in the block - this is the coinbase tx.
-        List<Transaction> transactions = block169482.getTransactions();
+        List<Transaction> transactions = block159543.getTransactions();
         assertNotNull(transactions);
         wallet.receiveFromBlock(transactions.get(0), storedBlock, NewBlockType.BEST_CHAIN, 0);
 

@@ -47,19 +47,19 @@ public class Base58Test {
     @Test
     public void testEncodeChecked_address() throws Exception {
         String encoded = Base58.encodeChecked(111, new byte[LegacyAddress.LENGTH]);
-        assertEquals("mfWxJ45yp2SFn7UciZyNpvDKrzbhyfKrY8", encoded);
+        assertEquals("mfWxJ45yp2SFn7UciZyNpvDKrzbhyi2FHM", encoded);
     }
 
     @Test
     public void testEncodeChecked_privateKey() throws Exception {
         String encoded = Base58.encodeChecked(128, new byte[32]);
-        assertEquals("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAbuatmU", encoded);
+        assertEquals("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAgJrc9s", encoded);
     }
 
     @Test
     public void testDecode() throws Exception {
         byte[] testbytes = "Hello World".getBytes();
-        byte[] actualbytes = Base58.decode("JxF12TrwUP45BMd");
+        byte[] actualbytes = Base58.decode("JxF12TrwUSi7YDU");
         assertTrue(new String(actualbytes), Arrays.equals(testbytes, actualbytes));
         
         assertTrue("1", Arrays.equals(Base58.decode("1"), new byte[1]));
@@ -76,7 +76,7 @@ public class Base58Test {
 
     @Test
     public void testDecodeChecked() {
-        Base58.decodeChecked("4stwEBjT6FYyVV");
+        Base58.decodeChecked("4stwEBjT7p64Ty");
 
         // Now check we can correctly decode the case where the high bit of the first byte is not zero, so BigInteger
         // sign extends. Fix for a bug that stopped us parsing keys exported using sipas patch.

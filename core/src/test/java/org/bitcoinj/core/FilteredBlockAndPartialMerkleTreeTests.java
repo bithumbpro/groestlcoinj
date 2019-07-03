@@ -54,7 +54,7 @@ public class FilteredBlockAndPartialMerkleTreeTests extends TestWithPeerGroup {
         // Cheat and place the previous block (block 100000) at the head of the block store without supporting blocks
         store.put(new StoredBlock(new Block(UNITTEST, HEX.decode("0100000050120119172a610421a6c3011dd330d9df07b63616c2cc1f1cd00200000000006657a9252aacd5c0b2940996ecff952228c3067cc38d4885efb5a4ac4247e9f337221b4d4c86041b0f2b5710")),
                 BigInteger.valueOf(1), 100000));
-        store.setChainHead(store.get(Sha256Hash.wrap("000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506")));
+        store.setChainHead(store.get(Sha256Hash.wrap("dc92e72beb5ad461dab054977760b66b1ae44c257722aba9efa4b03cf3478016")));
 
         KeyChainGroup group = KeyChainGroup.builder(UNITTEST).build();
         group.importKeys(ECKey.fromPublicOnly(HEX.decode("04b27f7e9475ccf5d9a431cb86d665b8302c140144ec2397fce792f4a4e7765fecf8128534eaa71df04f93c74676ae8279195128a1506ebf7379d23dab8fca0f63")),
@@ -78,7 +78,7 @@ public class FilteredBlockAndPartialMerkleTreeTests extends TestWithPeerGroup {
         FilteredBlock block = new FilteredBlock(UNITTEST, HEX.decode("0100000079cda856b143d9db2c1caff01d1aecc8630d30625d10e8b4b8b0000000000000b50cc069d6a3e33e3ff84a5c41d9d3febe7c770fdcc96b2c3ff60abe184f196367291b4d4c86041b8fa45d630100000001b50cc069d6a3e33e3ff84a5c41d9d3febe7c770fdcc96b2c3ff60abe184f19630101"));
         
         // Check that the header was properly deserialized
-        assertTrue(block.getBlockHeader().getHash().equals(Sha256Hash.wrap("000000000000dab0130bbcc991d3d7ae6b81aa6f50a798888dfe62337458dc45")));
+        assertTrue(block.getBlockHeader().getHash().equals(Sha256Hash.wrap("cf14f88b6c5dfa8fdf3cebb97dae7231a3e10124cada98dd3fa2e2593136636a")));
         
         // Check that the partial merkle tree is correct
         List<Sha256Hash> txesMatched = block.getTransactionHashes();
@@ -95,7 +95,7 @@ public class FilteredBlockAndPartialMerkleTreeTests extends TestWithPeerGroup {
         ECKey key2 = new ECKey();
         Transaction tx1 = FakeTxBuilder.createFakeTx(UNITTEST, Coin.COIN,  key1);
         Transaction tx2 = FakeTxBuilder.createFakeTx(UNITTEST, Coin.FIFTY_COINS, LegacyAddress.fromKey(UNITTEST, key2));
-        Block block = FakeTxBuilder.makeSolvedTestBlock(UNITTEST.getGenesisBlock(), LegacyAddress.fromBase58(UNITTEST, "msg2t2V2sWNd85LccoddtWysBTR8oPnkzW"), tx1, tx2);
+        Block block = FakeTxBuilder.makeSolvedTestBlock(UNITTEST.getGenesisBlock(), LegacyAddress.fromBase58(UNITTEST, "msg2t2V2sWNd85LccoddtWysBTR8juqQkq"), tx1, tx2);
         BloomFilter filter = new BloomFilter(4, 0.1, 1);
         filter.insert(key1);
         filter.insert(key2);

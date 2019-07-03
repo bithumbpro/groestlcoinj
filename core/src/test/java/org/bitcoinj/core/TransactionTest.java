@@ -659,7 +659,7 @@ public class TransactionTest {
         assertEquals(hash, txHash); //compare the block explorer hash to the hash of the transaction data
 
         try {
-            Sha256Hash hashTwice = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(txData));
+            Sha256Hash hashTwice = Sha256Hash.wrapReversed(Sha256Hash.hash(txData));
             assertEquals(hashTwice, txHash);
             fail();
         } catch (AssertionError x) {
