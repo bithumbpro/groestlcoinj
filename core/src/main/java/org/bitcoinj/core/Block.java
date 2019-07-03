@@ -220,9 +220,7 @@ public class Block extends Message {
      * </p>
      */
     public Coin getBlockInflation(int height) {
-        //return FIFTY_COINS.shiftRight(height / params.getSubsidyDecreaseBlockCount());
-        //    return /*Utils.toNanoCoins(*/CoinDefinition.GetBlockReward(height)/*, 0)*/;
-        return CoinDefinition.GetBlockReward(height);
+        return CoinDefinition.GetBlockSubsidy(height);
     }
 
     /**
