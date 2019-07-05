@@ -951,9 +951,12 @@ public class KeyChainGroup implements KeyBag {
                 seed = seed.decrypt(keyCrypter, "", aesKey);
             }
             log.info("Upgrading from P2PKH to P2WPKH deterministic keychain. Using seed: {}", seed);
+            ImmutableList<ChildNumber> path = structure.accountPathFor(Script.ScriptType.P2WPKH);
+            if(path.equals(DeterministicKeyChain.BIP84_ACCOUNT_ZERO_PATH) && params.getId().equals(NetworkParameters.ID_TESTNET))
+                path = DeterministicKeyChain.BIP84_TESTNET_ACCOUNT_ZERO_PATH;
             DeterministicKeyChain chain = DeterministicKeyChain.builder().seed(seed)
                     .outputScriptType(Script.ScriptType.P2WPKH)
-                    .accountPath(structure.accountPathFor(Script.ScriptType.P2WPKH)).build();
+                    .accountPath(path).build();
             if (seedWasEncrypted)
                 chain = chain.toEncrypted(checkNotNull(keyCrypter), aesKey);
             addAndActivateHDChain(chain);
