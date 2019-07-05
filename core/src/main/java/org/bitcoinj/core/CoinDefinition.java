@@ -163,7 +163,7 @@ public class CoinDefinition {
     static final Coin minimumSubsidy = Coin.valueOf(5,0);
     static final Coin nPremine = Coin.valueOf(240640,0);
 
-    Coin GetBlockSubsidy(int nHeight){
+    public static Coin GetBlockSubsidy(int nHeight){
 
 
         if (nHeight == 0)
