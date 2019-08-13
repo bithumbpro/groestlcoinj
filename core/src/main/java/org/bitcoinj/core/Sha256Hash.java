@@ -117,6 +117,9 @@ public class Sha256Hash implements Serializable, Comparable<Sha256Hash> {
         return twiceOf(contents);
     }
 
+    public static Sha256Hash onceOf(byte[] contents) {
+        return wrap(hash(contents));
+    }
     /**
      * Creates a new instance containing the hash of the calculated hash of the given bytes.
      *

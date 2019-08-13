@@ -17,6 +17,8 @@
 
 package org.bitcoinj.core;
 
+import com.hashengineering.crypto.Groestl;
+
 import java.math.BigInteger;
 import java.util.Arrays;
 
@@ -107,7 +109,7 @@ public class Base58 {
         byte[] addressBytes = new byte[1 + payload.length + 4];
         addressBytes[0] = (byte) version;
         System.arraycopy(payload, 0, addressBytes, 1, payload.length);
-        byte[] checksum = Sha256Hash.hashTwice(addressBytes, 0, payload.length + 1);
+        byte[] checksum = Groestl.digest(addressBytes, 0, payload.length + 1);
         System.arraycopy(checksum, 0, addressBytes, payload.length + 1, 4);
         return Base58.encode(addressBytes);
     }
@@ -173,7 +175,27 @@ public class Base58 {
             throw new AddressFormatException.InvalidDataLength("Input too short: " + decoded.length);
         byte[] data = Arrays.copyOfRange(decoded, 0, decoded.length - 4);
         byte[] checksum = Arrays.copyOfRange(decoded, decoded.length - 4, decoded.length);
-        byte[] actualChecksum = Arrays.copyOfRange(Sha256Hash.hashTwice(data), 0, 4);
+        byte[] actualChecksum = Arrays.copyOfRange(Groestl.digest(data), 0, 4);
+        if (!Arrays.equals(checksum, actualChecksum))
+            throw new AddressFormatException.InvalidChecksum();
+        return data;
+    }
+
+    /**
+     * Decodes the given base58 string into the original data bytes, using the checksum in the
+     * last 4 bytes of the decoded data to verify that the rest are correct. The checksum is
+     * removed from the returned data.
+     *
+     * @param input the base58-encoded string to decode (which should include the checksum)
+     * @throws AddressFormatException if the input is not base 58 or the checksum does not validate.
+     */
+    public static byte[] decodeCheckedSha256D(String input) throws AddressFormatException {
+        byte[] decoded  = decode(input);
+        if (decoded.length < 4)
+            throw new AddressFormatException.InvalidDataLength("Input too short: " + decoded.length);
+        byte[] data = Arrays.copyOfRange(decoded, 0, decoded.length - 4);
+        byte[] checksum = Arrays.copyOfRange(decoded, decoded.length - 4, decoded.length);
+        byte[] actualChecksum = Arrays.copyOfRange(Groestl.digest(data), 0, 4);
         if (!Arrays.equals(checksum, actualChecksum))
             throw new AddressFormatException.InvalidChecksum();
         return data;

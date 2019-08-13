@@ -705,7 +705,7 @@ public class ECKey implements EncryptableItem {
         if (Secp256k1Context.isEnabled()) {
             try {
                 return NativeSecp256k1.verify(data, signature.encodeToDER(), pub);
-            } catch (NativeSecp256k1Util.AssertFailException e) {
+            } catch (Exception e) {
                 log.error("Caught AssertFailException inside secp256k1", e);
                 return false;
             }
@@ -735,7 +735,7 @@ public class ECKey implements EncryptableItem {
         if (Secp256k1Context.isEnabled()) {
             try {
                 return NativeSecp256k1.verify(data, signature, pub);
-            } catch (NativeSecp256k1Util.AssertFailException e) {
+            } catch (Exception e) {
                 log.error("Caught AssertFailException inside secp256k1", e);
                 return false;
             }
@@ -863,7 +863,7 @@ public class ECKey implements EncryptableItem {
      */
     public String signMessage(String message, @Nullable KeyParameter aesKey) throws KeyCrypterException {
         byte[] data = formatMessageForSigning(message);
-        Sha256Hash hash = Sha256Hash.twiceOf(data);
+        Sha256Hash hash = Sha256Hash.onceOf(data);
         ECDSASignature sig = sign(hash, aesKey);
         // Now we have to work backwards to figure out the recId needed to recover the signature.
         int recId = -1;
@@ -917,7 +917,7 @@ public class ECKey implements EncryptableItem {
         byte[] messageBytes = formatMessageForSigning(message);
         // Note that the C++ code doesn't actually seem to specify any character encoding. Presumably it's whatever
         // JSON-SPIRIT hands back. Assume UTF-8 for now.
-        Sha256Hash messageHash = Sha256Hash.twiceOf(messageBytes);
+        Sha256Hash messageHash = Sha256Hash.onceOf(messageBytes);
         boolean compressed = false;
         if (header >= 31) {
             compressed = true;

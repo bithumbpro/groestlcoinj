@@ -311,7 +311,7 @@ public class Transaction extends ChildMessage {
                 // Cannot happen, we are serializing to a memory stream.
             }
             byte[] bits = stream.toByteArray();
-            return Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bits));
+            return Sha256Hash.wrapReversed(Sha256Hash.hash(bits));
         } else if (hash == null) {
             ByteArrayOutputStream stream = new UnsafeByteArrayOutputStream(length < 32 ? 32 : length + 32);
             try {
@@ -320,7 +320,7 @@ public class Transaction extends ChildMessage {
                 // Cannot happen, we are serializing to a memory stream.
             }
             byte[] bits = stream.toByteArray();
-            hash = Sha256Hash.wrapReversed(Sha256Hash.hashTwice(bits));
+            hash = Sha256Hash.wrapReversed(Sha256Hash.hash(bits));
         }
         return hash;
     }
@@ -1407,7 +1407,7 @@ public class Transaction extends ChildMessage {
             uint32ToByteStreamLE(0x000000ff & sigHashType, bos);
             // Note that this is NOT reversed to ensure it will be signed correctly. If it were to be printed out
             // however then we would expect that it is IS reversed.
-            Sha256Hash hash = Sha256Hash.twiceOf(bos.toByteArray());
+            Sha256Hash hash = Sha256Hash.onceOf(bos.toByteArray());
             bos.close();
 
             return hash;
@@ -1463,7 +1463,7 @@ public class Transaction extends ChildMessage {
                     bosHashPrevouts.write(this.inputs.get(i).getOutpoint().getHash().getReversedBytes());
                     uint32ToByteStreamLE(this.inputs.get(i).getOutpoint().getIndex(), bosHashPrevouts);
                 }
-                hashPrevouts = Sha256Hash.hashTwice(bosHashPrevouts.toByteArray());
+                hashPrevouts = Sha256Hash.hash(bosHashPrevouts.toByteArray());
             }
 
             if (!anyoneCanPay && type != SigHash.SINGLE && type != SigHash.NONE) {
@@ -1471,7 +1471,7 @@ public class Transaction extends ChildMessage {
                 for (int i = 0; i < this.inputs.size(); ++i) {
                     uint32ToByteStreamLE(this.inputs.get(i).getSequenceNumber(), bosSequence);
                 }
-                hashSequence = Sha256Hash.hashTwice(bosSequence.toByteArray());
+                hashSequence = Sha256Hash.hash(bosSequence.toByteArray());
             }
 
             if (type != SigHash.SINGLE && type != SigHash.NONE) {
@@ -1484,7 +1484,7 @@ public class Transaction extends ChildMessage {
                     bosHashOutputs.write(new VarInt(this.outputs.get(i).getScriptBytes().length).encode());
                     bosHashOutputs.write(this.outputs.get(i).getScriptBytes());
                 }
-                hashOutputs = Sha256Hash.hashTwice(bosHashOutputs.toByteArray());
+                hashOutputs = Sha256Hash.hash(bosHashOutputs.toByteArray());
             } else if (type == SigHash.SINGLE && inputIndex < outputs.size()) {
                 ByteArrayOutputStream bosHashOutputs = new UnsafeByteArrayOutputStream(256);
                 uint64ToByteStreamLE(
@@ -1493,7 +1493,7 @@ public class Transaction extends ChildMessage {
                 );
                 bosHashOutputs.write(new VarInt(this.outputs.get(inputIndex).getScriptBytes().length).encode());
                 bosHashOutputs.write(this.outputs.get(inputIndex).getScriptBytes());
-                hashOutputs = Sha256Hash.hashTwice(bosHashOutputs.toByteArray());
+                hashOutputs = Sha256Hash.hash(bosHashOutputs.toByteArray());
             }
             uint32ToByteStreamLE(version, bos);
             bos.write(hashPrevouts);
@@ -1511,7 +1511,7 @@ public class Transaction extends ChildMessage {
             throw new RuntimeException(e);  // Cannot happen.
         }
 
-        return Sha256Hash.twiceOf(bos.toByteArray());
+        return Sha256Hash.onceOf(bos.toByteArray());
     }
 
     @Override

@@ -17,6 +17,7 @@
 
 package org.bitcoinj.core;
 
+import com.hashengineering.crypto.Groestl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +103,7 @@ public class BitcoinSerializer extends MessageSerializer {
 
         Utils.uint32ToByteArrayLE(message.length, header, 4 + COMMAND_LEN);
 
-        byte[] hash = Sha256Hash.hashTwice(message);
+        byte[] hash = Groestl.digest(message);
         System.arraycopy(hash, 0, header, 4 + COMMAND_LEN + 4, 4);
         out.write(header);
         out.write(message);
