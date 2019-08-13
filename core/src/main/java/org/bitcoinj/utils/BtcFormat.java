@@ -16,6 +16,7 @@
 
 package org.bitcoinj.utils;
 
+import org.bitcoinj.core.CoinDefinition;
 import org.bitcoinj.utils.BtcAutoFormat.Style;
 import static org.bitcoinj.utils.BtcAutoFormat.Style.*;
 
@@ -500,11 +501,11 @@ public abstract class BtcFormat extends Format {
      */
 
     /** The conventional international currency code for bitcoins: "BTC" */
-    private static final String COIN_CODE = "BTC";
+    private static final String COIN_CODE = CoinDefinition.coinTicker;//"BTC";
     /** The default currency symbols for bitcoins */
-    private static final String COIN_SYMBOL = "฿";
+    private static final String COIN_SYMBOL = "Ǥ";
     /** An alternative currency symbol to use in locales where the default symbol is used for the national currency. */
-    protected static final String COIN_SYMBOL_ALT = "Ƀ";
+    protected static final String COIN_SYMBOL_ALT = "Ǥ";
 
     protected final DecimalFormat numberFormat; // warning: mutable
     protected final int minimumFractionDigits;
@@ -533,7 +534,7 @@ public abstract class BtcFormat extends Format {
      * <p>This class constructs new instances of {@link BtcFormat}, allowing for the
      * configuration of those instances before they are constructed.  After obtaining a
      * {@code Builder} object from the {@link BtcFormat#builder()} method, invoke the
-     * necessary setter methods to obtain your desired configuration.  Finaly, the {@link
+     * necessary setter methods to obtain your desired configuration.  Finally, the {@link
      * #build()} method returns a new {@code BtcFormat} object that has the specified
      * configuration.
      *
