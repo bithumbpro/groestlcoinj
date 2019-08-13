@@ -169,7 +169,7 @@ public class BitcoinSerializer extends MessageSerializer {
 
         // Verify the checksum.
         byte[] hash;
-        hash = Sha256Hash.hashTwice(payloadBytes);
+        hash = Groestl.digest(payloadBytes);
         if (header.checksum[0] != hash[0] || header.checksum[1] != hash[1] ||
                 header.checksum[2] != hash[2] || header.checksum[3] != hash[3]) {
             throw new ProtocolException("Checksum failed to verify, actual " +
