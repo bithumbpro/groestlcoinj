@@ -19,13 +19,13 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <parent>
-    <groupId>org.bitcoinj</groupId>
-    <artifactId>bitcoinj-parent</artifactId>
-    <version>0.15-SNAPSHOT</version>
+    <groupId>org.groestlcoinj</groupId>
+    <artifactId>groestlcoinj-parent</artifactId>
+    <version>0.15-LNWALLET</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>bitcoinj-tools</artifactId>
+  <artifactId>groestlcoinj-tools</artifactId>
 
   <name>bitcoinj Tools</name>
   <description>A collection of useful tools that use the bitcoinj library to perform wallet operations</description>
@@ -92,7 +92,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.bitcoinj</groupId>
+      <groupId>org.groestlcoinj</groupId>
       <artifactId>bitcoinj-core</artifactId>
       <version>${project.parent.version}</version>
     </dependency>
