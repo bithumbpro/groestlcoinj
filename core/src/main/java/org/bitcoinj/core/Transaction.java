@@ -107,7 +107,7 @@ public class Transaction extends ChildMessage {
     /**
      * If feePerKb is lower than this, Bitcoin Core will treat it as if there were no fee.
      */
-    public static final Coin REFERENCE_DEFAULT_MIN_TX_FEE = Coin.valueOf(1000); // 0.01 mBTC
+    public static final Coin REFERENCE_DEFAULT_MIN_TX_FEE = CoinDefinition.DEFAULT_MIN_TX_FEE; // 0.05 mBTC
 
     /**
      * If using this feePerKb, transactions will get confirmed within the next couple of blocks.
@@ -119,8 +119,8 @@ public class Transaction extends ChildMessage {
      * Any standard (ie P2PKH) output smaller than this value (in satoshis) will most likely be rejected by the network.
      * This is calculated by assuming a standard output will be 34 bytes, and then using the formula used in
      */
-    public static final Coin MIN_NONDUST_OUTPUT = Coin.valueOf(546); // satoshis
 
+    public static final Coin MIN_NONDUST_OUTPUT = CoinDefinition.DUST_LIMIT; // satoshis
     /**
      * Max initial size of inputs and outputs ArrayList.
      */
