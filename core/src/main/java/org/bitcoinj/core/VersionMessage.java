@@ -51,8 +51,6 @@ public class VersionMessage extends Message {
     public static final int NODE_GETUTXOS = 1 << 1;
     /** Indicates that a node can be asked for blocks and transactions including witness data. */
     public static final int NODE_WITNESS = 1 << 3;
-    /** A service bit used by Bitcoin-ABC to announce Bitcoin Cash nodes. */
-    public static final int NODE_BITCOIN_CASH = 1 << 5;
 
     /**
      * The version number of the protocol spoken.
