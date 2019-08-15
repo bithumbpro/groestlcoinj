@@ -16,8 +16,12 @@
 
 package org.bitcoinj.params;
 
+import org.bitcoinj.core.CoinDefinition;
+
 import org.bitcoinj.core.*;
 import org.bitcoinj.script.Script;
+import org.bitcoinj.store.BlockStore;
+import org.bitcoinj.store.BlockStoreException;
 import org.bitcoinj.utils.VersionTally;
 
 import java.math.BigInteger;
@@ -36,16 +40,16 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
         super();
         id = ID_UNITTESTNET;
         packetMagic = 0x0b110907;
-        addressHeader = 111;
-        p2shHeader = 196;
-        maxTarget = new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
+        addressHeader = CoinDefinition.testnetAddressHeader;
+        p2shHeader = CoinDefinition.testnetp2shHeader;
+        maxTarget = new BigInteger("7fffff0000000000000000000000000000000000000000000000000000000000", 16);
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
         genesisBlock.solve();
-        port = 18333;
+        port = CoinDefinition.TestPort;
         interval = 10;
-        dumpedPrivateKeyHeader = 239;
-        segwitAddressHrp = "tb";
+        dumpedPrivateKeyHeader = 128 + CoinDefinition.testnetAddressHeader;
+        segwitAddressHrp = "tgrs";
         targetTimespan = 200000000;  // 6 years. Just a very big number.
         spendableCoinbaseDepth = 5;
         subsidyDecreaseBlockCount = 100;
@@ -74,26 +78,9 @@ public class UnitTestParams extends AbstractBitcoinNetParams {
 
     // TODO: implement BIP-9 instead
     @Override
-    public EnumSet<Script.VerifyFlag> getTransactionVerificationFlags(
-            final Block block,
-            final Transaction transaction,
-            final VersionTally tally,
-            final Integer height)
-    {
-        final EnumSet<Script.VerifyFlag> flags = super.getTransactionVerificationFlags(block, transaction, tally, height);
-        flags.add(Script.VerifyFlag.SEGWIT);
-        return flags;
-    }
+    public void checkDifficultyTransitions(final StoredBlock storedPrev, final Block nextBlock,
+                                           final BlockStore blockStore) throws VerificationException, BlockStoreException {
 
-    // TODO: implement BIP-9 instead
-    @Override
-    public EnumSet<Block.VerifyFlag> getBlockVerificationFlags(
-            final Block block,
-            final VersionTally tally,
-            final Integer height)
-    {
-        EnumSet<Block.VerifyFlag> flags = super.getBlockVerificationFlags(block, tally, height);
-        flags.add(Block.VerifyFlag.SEGWIT);
-        return flags;
+        checkDifficultyTransitions_btc(storedPrev, nextBlock, blockStore);
     }
 }

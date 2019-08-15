@@ -18,6 +18,8 @@
 package org.bitcoinj.params;
 
 import org.bitcoinj.core.Block;
+import org.bitcoinj.core.CoinDefinition;
+import org.bitcoinj.core.Sha256Hash;
 
 import java.math.BigInteger;
 
@@ -32,17 +34,19 @@ public class RegTestParams extends AbstractBitcoinNetParams {
     public RegTestParams() {
         super();
         packetMagic = 0xfabfb5daL;
-        addressHeader = 111;
-        p2shHeader = 196;
+        addressHeader = CoinDefinition.testnetAddressHeader;
+        p2shHeader = CoinDefinition.testnetp2shHeader;
         targetTimespan = TARGET_TIMESPAN;
-        dumpedPrivateKeyHeader = 239;
-        segwitAddressHrp = "bcrt";
-        genesisBlock.setTime(1296688602L);
-        genesisBlock.setDifficultyTarget(0x1d07fff8L);
-        genesisBlock.setNonce(384568319);
-        spendableCoinbaseDepth = 100;
+        dumpedPrivateKeyHeader = 128 + CoinDefinition.testnetAddressHeader;
+        segwitAddressHrp = "grsrt";
+        genesisBlock.setTime(CoinDefinition.testnetGenesisBlockTime);
+        genesisBlock.setDifficultyTarget(CoinDefinition.testnetGenesisBlockDifficultyTarget);
+        genesisBlock.setNonce(CoinDefinition.testnetGenesisBlockNonce);
+        genesisBlock.setVersion(3);
+        spendableCoinbaseDepth = CoinDefinition.spendableCoinbaseDepth;
+        genesisBlock.setMerkleRoot(Sha256Hash.wrap("3ce968df58f9c8a752306c4b7264afab93149dbc578bd08a42c446caaa6628bb"));
         String genesisHash = genesisBlock.getHashAsString();
-        checkState(genesisHash.equals("00000007199508e34a9ff81e6ec0c477a4cccff2a4767a8eee39c11db367b008"));
+        checkState(genesisHash.equals("000000ffbb50fc9898cdd36ec163e6ba23230164c0052a28876255b7dcf2cd36"));
         dnsSeeds = null;
         addrSeeds = null;
         bip32HeaderPub = 0x043587CF;
@@ -54,10 +58,9 @@ public class RegTestParams extends AbstractBitcoinNetParams {
         interval = Integer.MAX_VALUE;
         maxTarget = MAX_TARGET;
         subsidyDecreaseBlockCount = 150;
-        port = 18444;
+        port = 18888;
         id = ID_REGTEST;
-        addressHeader = 111;
-        p2shHeader = 196;
+
         majorityEnforceBlockUpgrade = MainNetParams.MAINNET_MAJORITY_ENFORCE_BLOCK_UPGRADE;
         majorityRejectBlockOutdated = MainNetParams.MAINNET_MAJORITY_REJECT_BLOCK_OUTDATED;
         majorityWindow = MainNetParams.MAINNET_MAJORITY_WINDOW;
@@ -78,7 +81,7 @@ public class RegTestParams extends AbstractBitcoinNetParams {
                 genesis.setNonce(2);
                 genesis.setDifficultyTarget(0x207fFFFFL);
                 genesis.setTime(1296688602L);
-                checkState(genesis.getHashAsString().toLowerCase().equals("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
+                //checkState(genesis.getHashAsString().toLowerCase().equals("0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
             }
             return genesis;
         }
