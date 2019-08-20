@@ -207,7 +207,7 @@ public class BitcoinSerializer extends MessageSerializer {
         } else if (command.equals("getheaders")) {
             message = new GetHeadersMessage(params, payloadBytes);
         } else if (command.equals("tx")) {
-            message = makeTransaction(payloadBytes, 0, length, hash);
+            message = makeTransaction(payloadBytes);
         } else if (command.equals("addr")) {
             message = makeAddressMessage(payloadBytes, length);
         } else if (command.equals("ping")) {
