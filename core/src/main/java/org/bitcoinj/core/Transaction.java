@@ -927,7 +927,7 @@ public class Transaction extends ChildMessage {
      * to understand the values of sigHash and anyoneCanPay: otherwise you can use the other form of this method
      * that sets them to typical defaults.
      *
-     * @throws ScriptException if the scriptPubKey is not a pay to address or pay to pubkey script.
+     * @throws ScriptException if the scriptPubKey is not a pay to address or P2PK script.
      */
     public TransactionInput addSignedInput(TransactionOutPoint prevOut, Script scriptPubKey, ECKey sigKey,
                                            SigHash sigHash, boolean anyoneCanPay) throws ScriptException {
@@ -1040,7 +1040,7 @@ public class Transaction extends ChildMessage {
      *
      * @param inputIndex Which input to calculate the signature for, as an index.
      * @param key The private key used to calculate the signature.
-     * @param redeemScript Byte-exact contents of the scriptPubKey that is being satisified, or the P2SH redeem script.
+     * @param redeemScript Byte-exact contents of the scriptPubKey that is being satisfied, or the P2SH redeem script.
      * @param hashType Signing mode, see the enum for documentation.
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
@@ -1059,7 +1059,7 @@ public class Transaction extends ChildMessage {
      *
      * @param inputIndex Which input to calculate the signature for, as an index.
      * @param key The private key used to calculate the signature.
-     * @param redeemScript The scriptPubKey that is being satisified, or the P2SH redeem script.
+     * @param redeemScript The scriptPubKey that is being satisfied, or the P2SH redeem script.
      * @param hashType Signing mode, see the enum for documentation.
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
@@ -1080,7 +1080,7 @@ public class Transaction extends ChildMessage {
      * @param inputIndex Which input to calculate the signature for, as an index.
      * @param key The private key used to calculate the signature.
      * @param aesKey The AES key to use for decryption of the private key. If null then no decryption is required.
-     * @param redeemScript Byte-exact contents of the scriptPubKey that is being satisified, or the P2SH redeem script.
+     * @param redeemScript Byte-exact contents of the scriptPubKey that is being satisfied, or the P2SH redeem script.
      * @param hashType Signing mode, see the enum for documentation.
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
@@ -1101,7 +1101,7 @@ public class Transaction extends ChildMessage {
      * @param inputIndex Which input to calculate the signature for, as an index.
      * @param key The private key used to calculate the signature.
      * @param aesKey The AES key to use for decryption of the private key. If null then no decryption is required.
-     * @param redeemScript The scriptPubKey that is being satisified, or the P2SH redeem script.
+     * @param redeemScript The scriptPubKey that is being satisfied, or the P2SH redeem script.
      * @param hashType Signing mode, see the enum for documentation.
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
