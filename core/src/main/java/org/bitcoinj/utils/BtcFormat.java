@@ -443,7 +443,6 @@ import java.util.regex.Pattern;
  * than the maximum that a {@code Coin} object can represent will
  * raise a {@code ParseException}, as will any other detected
  * parsing error.</p>
->>>>>>> ea3a70e85e5bbc0392af52084137715a70ed022f
  *
  *  <h3>Limitations</h3>
  *
