@@ -16,9 +16,9 @@
 
 package wallettemplate;
 
-import org.bitcoinj.core.Utils;
-import org.bitcoinj.crypto.MnemonicCode;
-import org.bitcoinj.wallet.DeterministicSeed;
+import org.groestlcoinj.core.Utils;
+import org.groestlcoinj.crypto.MnemonicCode;
+import org.groestlcoinj.wallet.DeterministicSeed;
 import com.google.common.base.Splitter;
 import com.google.common.util.concurrent.Service;
 import javafx.application.Platform;
